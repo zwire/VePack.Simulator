@@ -64,10 +64,10 @@ namespace AirSim
                     var position = MapHelper.WgsToUtm(wgs);
                     var heading = x.Imu.Yaw;
                     var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 5;
-                    var geoInfo = _navigator?.Update(position, heading, GnssQuality.Simulation, lookAheadDistance);
+                    var geoInfo = _navigator?.Update(position, heading, lookAheadDistance);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        x, geoInfo
+                        x, x.Gnss, x.Imu,  geoInfo
                     );
                 })
                 .Publish();

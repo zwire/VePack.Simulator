@@ -24,12 +24,12 @@ namespace WpfApp
                 SteeringAngleValue = $"{info.Vehicle.SteeringAngle.Degree:f1} deg",
                 LateralErrorValue = $"{info.Geo.LateralError:f3} m",
                 HeadingErrorValue = $"{info.Geo.HeadingError.Degree:f1} deg",
-                GnssQualityValue = $"{info.Geo.GnssQuality}",
-                LatitudeValue = $"{info.Vehicle.Gnss.Latitude:f10}",
-                LongitudeValue = $"{info.Vehicle.Gnss.Longitude:f10}",
-                YawValue = $"{info.Vehicle.Imu.Yaw.Degree:f1} deg",
-                PitchValue = $"{info.Vehicle.Imu.Pitch.Degree:f1} deg",
-                RollValue = $"{info.Vehicle.Imu.Roll.Degree:f1} deg"
+                GnssQualityValue = $"{info.Gnss.GnssQuality}",
+                LatitudeValue = $"{info.Gnss.Latitude:f10}",
+                LongitudeValue = $"{info.Gnss.Longitude:f10}",
+                YawValue = $"{info.Imu.Yaw.Degree:f1} deg",
+                PitchValue = $"{info.Imu.Pitch.Degree:f1} deg",
+                RollValue = $"{info.Imu.Roll.Degree:f1} deg"
             };
     }
 }
