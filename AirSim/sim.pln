@@ -1,0 +1,8 @@
+Working plan for cultivating
+sim.map	;navigation map name
+2.63	;Work width [m]
+2	;Total path number
+1	2	;Order of travel path
+0	0	4	0	0	;Code of approach guidance
+PTO(ON=1), hitch(Down=1), transmission(1-8), engine speed(MAX=1), Working flag(Working=1) :See Coding.h
+0.000000	;Offset
