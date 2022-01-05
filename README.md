@@ -10,14 +10,14 @@
 ### Installation
 
 * VePack ... contact me.
-* AirSim ... 
+* AirSim ...  
 1. Install PyPI packages
 ```
 pip install msgpack-rpc-python
 pip install airsim
 pip install pynput
 ```
-2. Go to [AirSim Download Page](https://github.com/Microsoft/AirSim/releases) and doqnload your preference zip file from assets.
+2. Go to [AirSim download binaries page](https://github.com/Microsoft/AirSim/releases) and download your preference zip file from assets.
 3. Open .exe file. If you face error about DirectX, see [How to install DirectX end user runtime](https://faq.tsukumo.co.jp/index.php?solution_id=1321).
 4. Set [settings.json](/AirSim/settings.json) at the same folder as .exe.
 
