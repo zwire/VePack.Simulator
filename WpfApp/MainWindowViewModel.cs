@@ -3,7 +3,7 @@ using System.Linq;
 using System.Reactive.Linq;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Reactive.Bindings;
-using VePack.CoreModule;
+using VePack.Utilities;
 using AirSim;
 
 namespace WpfApp

@@ -1,5 +1,6 @@
 ﻿using System;
-using VePack.CoreModule;
+using VePack.Utilities;
+using VePack.Connectors;
 
 namespace AirSim
 {
@@ -16,7 +17,7 @@ namespace AirSim
 
         public double Throttle { get; set; } = 0;
 
-        public Angle SteeringAngle { get; set; } = new(0, AngleType.Degree);
+        public Angle SteeringAngle { get; set; } = Angle.Zero;
 
         public double FootBrake { get; set; } = 0;
 

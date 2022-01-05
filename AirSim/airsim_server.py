@@ -1,4 +1,4 @@
-import sys, time, threading, airsim, tcp_socket
+import time, threading, airsim, tcp_socket
 
 class VirtualVehicle:
 
@@ -43,10 +43,9 @@ class VirtualVehicle:
 if __name__ == '__main__':
 
     vehicle = VirtualVehicle()
-    if len(sys.argv) > 1:
-        vehicle.setMap(sys.argv[1].split(','))
     sock = tcp_socket.TcpServer('127.0.0.1', 3000)
     stream = sock.get_stream()
+    vehicle.setMap(stream.read().strip().split(','))
     lock = threading.Lock()
 
     def receivingLoop():

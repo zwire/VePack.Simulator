@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
 using VePack;
-using VePack.CoreModule;
-using VePack.Plugin.ControlModule;
-using VePack.Plugin.MapModule;
+using VePack.Utilities;
+using VePack.Plugin.Controllers;
+using VePack.Plugin.Navigation;
 
 namespace AirSim
 {
@@ -38,6 +40,15 @@ namespace AirSim
 
         public AirSimAutoCar(string mapFile = null, string plnFile = null)
         {
+            _python = new() { StartInfo = new(pythonExe) { Arguments = pyFile } };
+            _python.Start();
+            _client = new("127.0.0.1", 3000);
+            _stream = _client.GetStream();
+            _car = new(_stream);
+            _speedController = new(PidType.Speed, 0.002, 0, 0.003);
+            _steerController = new(2.0);
+            _operation = new();
+
             var line = "";
             if (mapFile is not null)
             {
@@ -47,14 +58,7 @@ namespace AirSim
                     foreach (var p in path.Points)
                         line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
             }
-            _python = new() { StartInfo = new(pythonExe) { Arguments = $"{pyFile} {line}" } };
-            _python.Start();
-            _client = new("127.0.0.1", 3000);
-            _stream = _client.GetStream();
-            _car = new(_stream);
-            _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            _steerController = new(2.0);
-            _operation = new();
+            _stream.WriteString(line);
             _car.ConnectSendingStream(TimeSpan.FromMilliseconds(100));
             var observable = _car.ConnectReceivingStream(TimeSpan.FromMilliseconds(100))
                 .Finally(() => Dispose())
@@ -63,11 +67,11 @@ namespace AirSim
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
                     var position = MapHelper.WgsToUtm(wgs);
                     var heading = x.Imu.Yaw;
-                    var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 5;
+                    var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 1;
                     var geoInfo = _navigator?.Update(position, heading, lookAheadDistance);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        x, x.Gnss, x.Imu,  geoInfo
+                        x, x.Gnss, x.Imu, geoInfo
                     );
                 })
                 .Publish();
@@ -94,29 +98,18 @@ namespace AirSim
             if (plnFile is not null)
                 map = MapHelper.ModifyMapByPlnFile(plnFile, map);
             _navigator = new(map, 5);
+            _navigator.CurrentPathChanged.Finally(() => Dispose());
         }
 
-        public void Start()
+        public async void Start()
         {
             _cts = new();
             _operation = new();
-            InfoUpdated
-                .Where(x => x is not null)
-                .Do(x =>
-                {
-                    var actualSpeed = x.Vehicle.VehicleSpeed;
-                    var speedError = actualSpeed - _targetSpeed;
-                    _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
-                    if (x.Geo is not null)
-                    {
-                        var current = x.Geo.VehiclePosition;
-                        var heading = x.Geo.VehicleHeading;
-                        var target = x.Geo.LookAheadPoint;
-                        _operation.SteeringAngle = _steerController.GetSteeringAngle(current, heading, target);
-                    }
-                    _car.Set(_operation);
-                })
-                .Subscribe(_cts.Token);
+            while (!_cts.IsCancellationRequested)
+            {
+                await TurnAsync(_cts.Token);
+                await FollowAsync(_cts.Token);
+            }
         }
 
         public void Stop()
@@ -129,6 +122,59 @@ namespace AirSim
         public void SetVehicleSpeed(double speed)
         {
             _targetSpeed = speed;
+        }
+
+
+        // ------ private methods ------ //
+
+        private async Task FollowAsync(CancellationToken ct)
+        {
+            Debug.WriteLine("start following.");
+            await InfoUpdated
+               .Where(x => x is not null)
+               .TakeUntil(x => ct.IsCancellationRequested)
+               .TakeUntil(_navigator.CurrentPathChanged)
+               .Do(x =>
+               {
+                   var actualSpeed = x.Vehicle.VehicleSpeed;
+                   var speedError = actualSpeed - _targetSpeed;
+                   _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
+                   if (x.Geo is not null)
+                   {
+                       var current = x.Geo.VehiclePosition;
+                       var heading = x.Geo.VehicleHeading;
+                       var target = x.Geo.LookAheadPoint;
+                       _operation.SteeringAngle = _steerController.GetSteeringAngle(current, heading, target);
+                   }
+                   _car.Set(_operation);
+               })
+               .ToTask();
+            Debug.WriteLine("finish following.");
+        }
+
+        private async Task TurnAsync(CancellationToken ct)
+        {
+            Debug.WriteLine("start turning.");
+            await InfoUpdated
+               .Where(x => x is not null)
+               .TakeUntil(x => ct.IsCancellationRequested)
+               .TakeUntil(x => x.Geo.OnThePath && Math.Abs(x.Geo.HeadingError.Degree) < 30)
+               .Do(x =>
+               {
+                   var actualSpeed = x.Vehicle.VehicleSpeed;
+                   var speedError = actualSpeed - _targetSpeed;
+                   _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
+                   if (x.Geo is not null)
+                   {
+                       var current = x.Geo.VehiclePosition;
+                       var heading = x.Geo.VehicleHeading;
+                       var target = x.Geo.LookAheadPoint;
+                       _operation.SteeringAngle = _steerController.GetSteeringAngle(current, heading, target);
+                   }
+                   _car.Set(_operation);
+               })
+               .ToTask();
+            Debug.WriteLine("finish turning.");
         }
 
     }
