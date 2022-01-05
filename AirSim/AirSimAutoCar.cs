@@ -8,6 +8,7 @@ using VePack;
 using VePack.Utilities;
 using VePack.Plugin.Controllers;
 using VePack.Plugin.Navigation;
+using System.Collections.Generic;
 
 namespace AirSim
 {
@@ -107,7 +108,8 @@ namespace AirSim
             _operation = new();
             while (!_cts.IsCancellationRequested)
             {
-                await TurnAsync(_cts.Token);
+                if (await IsToTurnAsync())
+                    await TurnAsync(_cts.Token);
                 await FollowAsync(_cts.Token);
             }
         }
@@ -154,6 +156,11 @@ namespace AirSim
 
         private async Task TurnAsync(CancellationToken ct)
         {
+            Debug.WriteLine("create turn path.");
+            var geo = await InfoUpdated.TakeUntil(x => x is not null).Select(x => x.Geo).LastOrDefaultAsync();
+            var path = CreateTurnPath(geo.VehiclePosition, geo.VehicleHeading, 4);
+            _navigator.InsertPath(_navigator.CurrentPathIndex, path);
+
             Debug.WriteLine("start turning.");
             await InfoUpdated
                .Where(x => x is not null)
@@ -175,6 +182,30 @@ namespace AirSim
                })
                .ToTask();
             Debug.WriteLine("finish turning.");
+        }
+
+        private async Task<bool> IsToTurnAsync()
+        {
+            var vehicleDirection = (await InfoUpdated.TakeUntil(x => x is not null).LastOrDefaultAsync()).Geo.VehicleHeading;
+            var pathDirection = new Vector2D(_navigator.CurrentPath.Points[0], _navigator.CurrentPath.Points[1]).ClockwiseAngleFromY;
+            return Math.Abs((vehicleDirection - pathDirection).Degree) > 90;
+        }
+
+        private PathData CreateTurnPath(Point2D vehiclePosition, Angle vehicleHeading, double turnRadius)
+        {
+            var targetPoint = _navigator.CurrentPath.Points[0];
+            var desiredDirectionVector = new Vector2D(vehiclePosition, targetPoint).UnitVector;
+            var left = desiredDirectionVector.ClockwiseAngleFromY < vehicleHeading;
+            var pivot1 = vehiclePosition + desiredDirectionVector * turnRadius;
+            var pivot2 = targetPoint - desiredDirectionVector * turnRadius;
+            var arc1 = new Arc2D(vehiclePosition, pivot1, new(left ? 90 : -90, AngleType.Degree));
+            var arc2 = new Arc2D(pivot2, targetPoint, new(left ? 90 : -90, AngleType.Degree));
+            var line = new LineSegment2D(arc1.End, arc2.Start);
+            var points = new List<Point2D>();
+            points.AddRange(arc1.ApproximateAsPoints(new(10, AngleType.Degree)));
+            points.AddRange(line.ApproximateAsPoints(2));
+            points.AddRange(arc2.ApproximateAsPoints(new(10, AngleType.Degree)));
+            return new(points, "Turn");
         }
 
     }
