@@ -1,0 +1,57 @@
+{
+  "SeeDocsAt": "https://github.com/Microsoft/AirSim/blob/master/docs/settings.md",
+  "SettingsVersion": 1.2,
+  "SimMode": "Car",
+  "ClockType": "",
+  "ClockSpeed": 1,
+  "LocalHostIp": "127.0.0.1",
+  "ApiServerPort": 41451,
+  "RecordUIVisible": false,
+  "LogMessagesVisible": true,
+  "RpcEnabled": true,
+  "Vehicles": {
+    "Car": {
+      "VehicleType": "PhysXCar",
+      "DefaultVehicleState": "",
+      "AutoCreate": true,
+      "PawnPath": "",
+      "EnableCollisionPassthrogh": false,
+      "EnableCollisions": true,
+      "RC": {
+        "RemoteControlID": 0
+      }
+    }
+  },
+  "OriginGeopoint": {
+    "Latitude": 43.06909130,
+    "Longitude": 141.34055986,
+    "Altitude": 0
+  },
+  "DefaultSensors": {
+    "Imu": {
+      "SensorType": 2,
+      "Enabled": true,
+      "AngularRandomWalk": 0.3,
+      "GyroBiasStabilityTau": 500,
+      "GyroBiasStability": 4.6,
+      "VelocityRandomWalk": 0.24,
+      "AccelBiasStabilityTau": 800,
+      "AccelBiasStability": 36
+    },
+    "Gps": {
+      "SensorType": 3,
+      "Enabled": true,
+      "EphTimeConstant": 0.9,
+      "EpvTimeConstant": 0.9,
+      "EphInitial": 25,
+      "EpvInitial": 25,
+      "EphFinal": 0.1,
+      "EpvFinal": 0.1,
+      "EphMin3d": 3,
+      "EphMin2d": 4,
+      "UpdateLatency": 0.2,
+      "UpdateFrequency": 50,
+      "StartupDelay": 1
+    }
+  }
+}
