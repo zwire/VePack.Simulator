@@ -8,7 +8,6 @@ using VePack;
 using VePack.Utilities;
 using VePack.Plugin.Controllers;
 using VePack.Plugin.Navigation;
-using System.Collections.Generic;
 
 namespace AirSim
 {
@@ -66,8 +65,8 @@ namespace AirSim
                 .Select(x =>
                 {
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
-                    var position = MapHelper.WgsToUtm(wgs);
                     var heading = x.Imu.Yaw;
+                    var position = MapHelper.WgsToUtm(wgs) - new Vector2D(Math.Sin(heading.Radian), Math.Cos(heading.Radian));
                     var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 1;
                     var geoInfo = _navigator?.Update(position, heading, lookAheadDistance);
                     return new CompositeInfo<CarInformation>(
@@ -98,20 +97,35 @@ namespace AirSim
             var map = MapHelper.LoadMapFromFile(mapFile);
             if (plnFile is not null)
                 map = MapHelper.ModifyMapByPlnFile(plnFile, map);
-            _navigator = new(map, 5);
+            _navigator = new(map, 3);
             _navigator.CurrentPathChanged.Finally(() => Dispose());
         }
 
         public async void Start()
         {
+
             _cts = new();
             _operation = new();
+
+            InfoUpdated
+               .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+               .Where(_ => _operation.FootBrake == 0)
+               .TakeUntil(x => _cts.IsCancellationRequested)
+               .Do(x =>
+               {
+                   var speedError = x.Vehicle.VehicleSpeed - _targetSpeed;
+                   _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
+                   _car.Set(_operation);
+               })
+               .Subscribe();
+
             while (!_cts.IsCancellationRequested)
             {
                 if (await IsToTurnAsync())
                     await TurnAsync(_cts.Token);
                 await FollowAsync(_cts.Token);
             }
+
         }
 
         public void Stop()
@@ -123,65 +137,40 @@ namespace AirSim
 
         public void SetVehicleSpeed(double speed)
         {
+            SetBrake(0);
             _targetSpeed = speed;
         }
 
 
         // ------ private methods ------ //
 
-        private async Task FollowAsync(CancellationToken ct)
+        private void SetSteeringAngle(Angle angle)
         {
-            Debug.WriteLine("start following.");
-            await InfoUpdated
-               .Where(x => x is not null)
-               .TakeUntil(x => ct.IsCancellationRequested)
-               .TakeUntil(_navigator.CurrentPathChanged)
-               .Do(x =>
-               {
-                   var actualSpeed = x.Vehicle.VehicleSpeed;
-                   var speedError = actualSpeed - _targetSpeed;
-                   _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
-                   if (x.Geo is not null)
-                   {
-                       var current = x.Geo.VehiclePosition;
-                       var heading = x.Geo.VehicleHeading;
-                       var target = x.Geo.LookAheadPoint;
-                       _operation.SteeringAngle = _steerController.GetSteeringAngle(current, heading, target);
-                   }
-                   _car.Set(_operation);
-               })
-               .ToTask();
-            Debug.WriteLine("finish following.");
+            _operation.SteeringAngle = new(angle.Degree.InsideOf(-30, 30), AngleType.Degree);
+            _car?.Set(_operation);
         }
 
-        private async Task TurnAsync(CancellationToken ct)
+        private void SetBrake(int level)
         {
-            Debug.WriteLine("create turn path.");
-            var geo = await InfoUpdated.TakeUntil(x => x is not null).Select(x => x.Geo).LastOrDefaultAsync();
-            var path = CreateTurnPath(geo.VehiclePosition, geo.VehicleHeading, 4);
-            _navigator.InsertPath(_navigator.CurrentPathIndex, path);
+            _operation.Throttle = 0;
+            _operation.FootBrake = level;
+            _car.Set(_operation);
+        }
 
-            Debug.WriteLine("start turning.");
+        private async Task FollowAsync(CancellationToken ct)
+        {
             await InfoUpdated
-               .Where(x => x is not null)
-               .TakeUntil(x => ct.IsCancellationRequested)
-               .TakeUntil(x => x.Geo.OnThePath && Math.Abs(x.Geo.HeadingError.Degree) < 30)
-               .Do(x =>
-               {
-                   var actualSpeed = x.Vehicle.VehicleSpeed;
-                   var speedError = actualSpeed - _targetSpeed;
-                   _operation.Throttle += _speedController.GetControlQuantity(speedError).InsideOf(-1, 1);
-                   if (x.Geo is not null)
-                   {
-                       var current = x.Geo.VehiclePosition;
-                       var heading = x.Geo.VehicleHeading;
-                       var target = x.Geo.LookAheadPoint;
-                       _operation.SteeringAngle = _steerController.GetSteeringAngle(current, heading, target);
-                   }
-                   _car.Set(_operation);
-               })
-               .ToTask();
-            Debug.WriteLine("finish turning.");
+                .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+                .TakeUntil(x => ct.IsCancellationRequested)
+                .TakeUntil(_navigator.CurrentPathChanged)
+                .Do(x =>
+                {
+                    var current = x.Geo.VehiclePosition;
+                    var heading = x.Geo.VehicleHeading;
+                    var target = x.Geo.LookAheadPoint;
+                    SetSteeringAngle(_steerController.GetSteeringAngle(current, heading, target));
+                })
+                .ToTask();
         }
 
         private async Task<bool> IsToTurnAsync()
@@ -191,21 +180,59 @@ namespace AirSim
             return Math.Abs((vehicleDirection - pathDirection).Degree) > 90;
         }
 
-        private PathData CreateTurnPath(Point2D vehiclePosition, Angle vehicleHeading, double turnRadius)
+        private async Task TurnAsync(CancellationToken ct)
         {
-            var targetPoint = _navigator.CurrentPath.Points[0];
-            var desiredDirectionVector = new Vector2D(vehiclePosition, targetPoint).UnitVector;
-            var left = desiredDirectionVector.ClockwiseAngleFromY < vehicleHeading;
-            var pivot1 = vehiclePosition + desiredDirectionVector * turnRadius;
-            var pivot2 = targetPoint - desiredDirectionVector * turnRadius;
-            var arc1 = new Arc2D(vehiclePosition, pivot1, new(left ? 90 : -90, AngleType.Degree));
-            var arc2 = new Arc2D(pivot2, targetPoint, new(left ? 90 : -90, AngleType.Degree));
-            var line = new LineSegment2D(arc1.End, arc2.Start);
-            var points = new List<Point2D>();
-            points.AddRange(arc1.ApproximateAsPoints(new(10, AngleType.Degree)));
-            points.AddRange(line.ApproximateAsPoints(2));
-            points.AddRange(arc2.ApproximateAsPoints(new(10, AngleType.Degree)));
-            return new(points, "Turn");
+
+            var initialInfo = await InfoUpdated.TakeUntil(x => x is not null).LastOrDefaultAsync();
+
+            // 今のところ変形圃場は無理です
+            var initialHeading = initialInfo.Geo.VehicleHeading;
+            var initialPoint = initialInfo.Geo.VehiclePosition;
+            var targetPoint = initialInfo.Geo.ReferencePoint;
+            var desiredDirection = new Vector2D(initialPoint, targetPoint).ClockwiseAngleFromY;
+            var left = desiredDirection - initialHeading < Angle.Zero;
+            SetSteeringAngle(new(left ? -30 : 30, AngleType.Degree));
+
+            // はじめの85度
+            var judgePoint = await InfoUpdated
+                .Where(x => x?.Geo is not null)
+                .TakeUntil(x => left
+                    ? desiredDirection - x.Geo.VehicleHeading > new Angle(-5, AngleType.Degree)
+                    : desiredDirection - x.Geo.VehicleHeading < new Angle(+5, AngleType.Degree)
+                )
+                .Select(x => x.Geo.VehiclePosition)
+                .LastOrDefaultAsync();
+
+            // 直進 or スイッチバック
+            SetSteeringAngle(Angle.Zero);
+            var minTurnLength = judgePoint.DistanceTo(initialPoint);
+            var switchback = minTurnLength > judgePoint.DistanceTo(targetPoint);
+            if (switchback)
+            {
+                SetBrake(2);
+                await Task.Delay(1000);
+                SetVehicleSpeed(-Math.Abs(_targetSpeed));
+                await InfoUpdated.Where(x => x is not null).TakeUntil(x => x.Geo.VehiclePosition.DistanceTo(targetPoint) > minTurnLength).ToTask();
+                SetBrake(2);
+                await Task.Delay(1000);
+                SetVehicleSpeed(Math.Abs(_targetSpeed));
+            }
+            else
+            {
+                await InfoUpdated.Where(x => x is not null).TakeUntil(x => x.Geo.VehiclePosition.DistanceTo(targetPoint) > minTurnLength).ToTask();
+            }
+
+            // 後半
+            desiredDirection = new Vector2D(_navigator.CurrentPath.Points[0], _navigator.CurrentPath.Points[1]).ClockwiseAngleFromY;
+            SetSteeringAngle(new(left ? -30 : 30, AngleType.Degree));
+            await InfoUpdated
+                .Where(x => x?.Geo is not null)
+                .TakeUntil(x =>
+                    left
+                       ? desiredDirection - x.Geo.VehicleHeading > new Angle(-10, AngleType.Degree)
+                       : desiredDirection - x.Geo.VehicleHeading < new Angle(+10, AngleType.Degree)
+                )
+                .ToTask();
         }
 
     }

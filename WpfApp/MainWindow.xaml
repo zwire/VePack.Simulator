@@ -6,7 +6,7 @@
         xmlns:mahApps="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
         mc:Ignorable="d"
         Title="" Height="400" Width="540" Background="{DynamicResource MaterialDesignBackground}"
-        BorderThickness="1" GlowBrush="{DynamicResource AccentColorBrush}" TitleCharacterCasing="Normal" ResizeMode="NoResize">
+        BorderThickness="1" GlowBrush="{DynamicResource AccentColorBrush}" TitleCharacterCasing="Normal" ResizeMode="CanMinimize">
 
     <Window.Resources>
         <Style x:Key="InfoStyle" TargetType="TextBlock">
