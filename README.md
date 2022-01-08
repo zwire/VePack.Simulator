@@ -5,7 +5,7 @@
 ### Requirements
 
 * VeBotsメンバーであること
-* .NET5/.NET6 開発環境 (Visual Studio　2019 or 2022)
+* .NET5/.NET6 開発環境 (Visual Studio 2019 or 2022)
 
 ### Installation
 
