@@ -4,26 +4,26 @@
 
 ### Requirements
 
-* VeBots member
-* .NET6 development environment
+* VeBotsメンバーであること
+* .NET5/.NET6 開発環境 (Visual Studio等)
 
 ### Installation
 
-* VePack ... contact me.
 * AirSim ...  
-1. Install PyPI packages
+1. Python パッケージ
 ```
 pip install msgpack-rpc-python
 pip install airsim
-pip install pynput
 ```
-2. Go to [AirSim download binaries page](https://github.com/Microsoft/AirSim/releases) and download your preference zip file from assets.
-3. Open .exe file. If you face error about DirectX, see [How to install DirectX end user runtime](https://faq.tsukumo.co.jp/index.php?solution_id=1321).
-4. Set [settings.json](/AirSim/settings.json) at the same folder as .exe.
+2. [AirSim ダウンロードページ](https://github.com/Microsoft/AirSim/releases) のAssetsから好きなzipファイルを落として展開.
+3. exeを開いてみる. おそらくDirectXについてのエラーが出るので, [DirectX エンドユーザーランタイムを手動でインストールする方法](https://faq.tsukumo.co.jp/index.php?solution_id=1321)で解決.
+4. [settings.json](/AirSim/settings.json) を展開したフォルダのexeがあるところに配置.
+
+* VePack ... 最新版は私のプライベートリポジトリから。aresにも一応置いてるのでcollabolatorでない場合はそちらから。
 
 ### About VePack
-* Utilities ... utilities such as IO and Geometry
-* Connectors ... sensor implementation and base class of sender / receiver
-* Plugin/Navigation ... serve map-base information on given position and direction
-* Plugin/Controllers ... implementation of vehicle control module
-* Plugin/Filters ... for post-process of sensor's output
+* Utilities ... IO とか Geometry とか
+* Connectors ... sender / receiver のベースクラスとセンサ系
+* Plugin/Navigation ... 位置方位をもとにマップ系の情報を返してくれる
+* Plugin/Controllers ... 制御アルゴリズムの実装
+* Plugin/Filters ... センサの後処理向けのフィルタ類
