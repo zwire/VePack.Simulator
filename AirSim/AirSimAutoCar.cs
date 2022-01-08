@@ -137,8 +137,9 @@ namespace AirSim
 
         public void SetVehicleSpeed(double speed)
         {
-            SetBrake(0);
             _targetSpeed = speed;
+            _operation.FootBrake = 0;
+            _car.Set(_operation);
         }
 
 
