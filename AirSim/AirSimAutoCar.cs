@@ -84,6 +84,7 @@ namespace AirSim
 
         public void Dispose()
         {
+            Stop();
             _cts?.Dispose();
             _connector?.Dispose();
             _car.Dispose();
@@ -133,6 +134,7 @@ namespace AirSim
             _cts?.Cancel();
             _operation = new() { FootBrake = 2 };
             _car.Set(_operation);
+            InfoUpdated.Where(x => x is not null).TakeUntil(x => x.Vehicle.VehicleSpeed < 0.1).ToTask().Wait();
         }
 
         public void SetVehicleSpeed(double speed)

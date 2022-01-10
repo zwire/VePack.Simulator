@@ -1,0 +1,124 @@
+﻿syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option csharp_namespace = "GrpcClient";
+
+package remote_monitor;
+
+service RemoteMonitor {
+    rpc AcceptLogin (AcceptLoginRequest) returns (AcceptLoginReply);
+    rpc AcceptTractorProperty (stream AcceptTractorPropertyRequest) returns (AcceptTractorPropertyReply);
+    rpc NotifyOperationCommand (NotifyOperationCommandRequest) returns (stream NotifyOperationCommandReply);
+    rpc NotifyOperationOption (NotifyOperationOptionRequest) returns (stream NotifyOperationOptionReply);
+    rpc NotifyRelease (NotifyReleaseRequest) returns (NotifyReleaseReply);
+}
+
+enum GrpcOperationCommand { 
+    Free = 0;
+    Go = 1;
+    Stop = 2;
+}
+
+enum GrpcBehaviorMode {
+    Unknown = 0;
+    Work = 1;
+    Turn = 2;
+    Transfer = 3;
+}
+
+enum GrpcShuttle { 
+    Neutral = 0;
+    Forward = 1;
+    Backward = 2;
+}
+
+enum GrpcHitch { 
+    Up = 0;
+    Down = 1;
+}
+
+enum GrpcPto { 
+    Off = 0;
+    On = 1;
+}
+
+enum GrpcGnssQuality {
+    Invalid = 0;
+    GpsFix = 1;
+    DGpsFix = 2;
+    PpsFix = 3;
+    RtkFix = 4;
+    RtkFloat = 5;
+    Estimated = 6;
+    Manual = 7;
+    Simulation = 8;
+    Undefined = -1;
+}
+
+message AcceptLoginRequest {
+	string user_id = 1;
+	string password = 2;
+}
+
+message AcceptLoginReply {
+	string session_id = 1;
+}
+
+message AcceptTractorPropertyRequest {
+    string session_id = 1;
+	google.protobuf.Timestamp time_stamp = 2;
+	bool is_running = 3;
+    GrpcBehaviorMode behavior_mode = 4;
+    google.protobuf.StringValue emergency_alert = 5;    // null is safe
+    GrpcGnssQuality gnss_quality = 6;
+    GrpcShuttle shuttle = 7;
+    int32 shift = 8;                                    // 1-8
+    int32 target_engine_speed = 9;                      // 900-2600 [rpm]
+    int32 actual_engine_speed = 10;                     // 900-2600 [rpm]
+    float target_vehicle_speed = 11;                    // [km/h]
+    float actual_vehicle_speed = 12;                    // [km/h]
+    double latitude = 13;
+    double longitude = 14;
+    double heading = 15;                                // -180 ~ +180 [deg] (west < north=0 < east)
+    float steering = 16;                                // -50 ~ +50 [deg] (left < 0 < right)
+    GrpcHitch hitch = 17;
+    GrpcPto pto = 18;
+}
+
+message AcceptTractorPropertyReply {
+
+}
+
+message NotifyOperationCommandRequest {
+    string session_id = 1;
+}
+
+message NotifyOperationCommandReply {
+    GrpcOperationCommand operation_command = 1;
+}
+
+message NotifyOperationOptionRequest {
+    string session_id = 1;
+}
+
+message NotifyOperationOptionReply {
+    oneof chosen {
+        int32 engine_speed = 1;                         // 900-2600 [rpm]
+        float vehicle_speed = 2;                        // [km/h]
+        GrpcHitch hitch = 3;
+        GrpcPto pto = 4;
+    }
+}
+
+message NotifyReleaseRequest {
+    string session_id = 1;
+}
+
+message NotifyReleaseReply {
+
+}
+
+// available data types
+// https://docs.microsoft.com/ja-jp/dotnet/architecture/grpc-for-wcf-developers/protobuf-data-types
