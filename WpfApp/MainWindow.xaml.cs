@@ -5,7 +5,9 @@
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainWindowViewModel();
+            var vm = new MainWindowViewModel();
+            DataContext = vm;
+            Closed += (s, e) => vm.Dispose();
         }
     }
 }

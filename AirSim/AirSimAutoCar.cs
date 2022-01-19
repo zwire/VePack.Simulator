@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
@@ -74,6 +75,7 @@ namespace AirSim
                         x, x.Gnss, x.Imu, geoInfo
                     );
                 })
+                .TakeUntil(x => x?.Geo is null)
                 .Publish();
             _connector = observable.Connect();
             InfoUpdated = observable;
@@ -227,7 +229,7 @@ namespace AirSim
 
             // 後半
             desiredDirection = new Vector2D(_navigator.CurrentPath.Points[0], _navigator.CurrentPath.Points[1]).ClockwiseAngleFromY;
-            SetSteeringAngle(new(left ? -30 : 30, AngleType.Degree));
+            SetSteeringAngle(new(left ? -25 : 25, AngleType.Degree));
             await InfoUpdated
                 .Where(x => x?.Geo is not null)
                 .TakeUntil(x =>
