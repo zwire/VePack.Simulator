@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Husty" Version="1.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\VePack\VePack\VePack.csproj" />
   </ItemGroup>
 

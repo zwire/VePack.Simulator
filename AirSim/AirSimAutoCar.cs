@@ -7,8 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using VePack;
 using VePack.Utilities;
-using VePack.Plugin.Controllers;
 using VePack.Plugin.Navigation;
+using VePack.Plugin.Controllers;
 
 namespace AirSim
 {
@@ -24,7 +24,7 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly PurePursuit _steerController;
+        private readonly CmacPidSteeringController _steerController;
         private readonly IDisposable _connector;
         private double _targetSpeed;
         private MapNavigator _navigator;
@@ -47,7 +47,13 @@ namespace AirSim
             _stream = _client.GetStream();
             _car = new(_stream);
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            _steerController = new(2.0);
+            _steerController = new(
+                new(10, 1, 20, e => 100 * e),
+                new(0.1, 0.01, 0.5, e => e),
+                new(10, 1, 20, e => 100 * e),
+                new Husty.Cmac.CmacLabelInfo[] { new(10, -2, 2), new(10, -2, 2) }, 
+                5, false
+            );
             _operation = new();
 
             var line = "";
@@ -164,16 +170,22 @@ namespace AirSim
 
         private async Task FollowAsync(CancellationToken ct)
         {
+            _steerController.Flush();
             await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeUntil(x => ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
                 .Do(x =>
                 {
-                    var current = x.Geo.VehiclePosition;
-                    var heading = x.Geo.VehicleHeading;
-                    var target = x.Geo.LookAheadPoint;
-                    SetSteeringAngle(_steerController.GetSteeringAngle(current, heading, target));
+                    if (x.Vehicle.VehicleSpeed < 0.2)
+                        _steerController.Flush();
+                    var e = x.Geo.LateralError + 0.08 * x.Geo.HeadingError.Degree;
+                    var quantity = _steerController.GetControlQuantity(e).InsideOf(-30, 30);
+                    Console.Write($"" +
+                       $"Kp: {_steerController.Kp:f3} ... " +
+                       $"Ki: {_steerController.Ki:f3} ... " +
+                       $"Kd: {_steerController.Kd:f3} ... ");
+                    SetSteeringAngle(new(quantity, AngleType.Degree));
                 })
                 .ToTask();
         }
