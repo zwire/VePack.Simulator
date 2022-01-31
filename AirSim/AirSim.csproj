@@ -9,6 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\ControlSimulator\Mpc\Mpc.csproj" />
     <ProjectReference Include="..\..\VePack\VePack\VePack.csproj" />
   </ItemGroup>
 

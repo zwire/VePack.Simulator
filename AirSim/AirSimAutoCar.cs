@@ -24,7 +24,7 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly CmacPidSteeringController _steerController;
+        private readonly NmpcSteeringController _steerController;
         private readonly IDisposable _connector;
         private double _targetSpeed;
         private MapNavigator _navigator;
@@ -47,13 +47,7 @@ namespace AirSim
             _stream = _client.GetStream();
             _car = new(_stream);
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            _steerController = new(
-                new(10, 1, 20, e => 100 * e),
-                new(0.1, 0.01, 0.5, e => e),
-                new(10, 1, 20, e => 100 * e),
-                new Husty.Cmac.CmacLabelInfo[] { new(10, -2, 2), new(10, -2, 2) }, 
-                5, false
-            );
+            _steerController = new(new KinematicSteeringModel(new(35, AngleType.Degree), 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5));
             _operation = new();
 
             var line = "";
@@ -73,7 +67,7 @@ namespace AirSim
                 {
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
                     var heading = x.Imu.Yaw;
-                    var position = MapHelper.WgsToUtm(wgs) - new Vector2D(Math.Sin(heading.Radian), Math.Cos(heading.Radian));
+                    var position = MapHelper.WgsToUtm(wgs);
                     var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 1;
                     var geoInfo = _navigator?.Update(position, heading, lookAheadDistance);
                     return new CompositeInfo<CarInformation>(
@@ -170,22 +164,17 @@ namespace AirSim
 
         private async Task FollowAsync(CancellationToken ct)
         {
-            _steerController.Flush();
+            _steerController.Reset();
             await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeUntil(x => ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
                 .Do(x =>
                 {
-                    if (x.Vehicle.VehicleSpeed < 0.2)
-                        _steerController.Flush();
-                    var e = x.Geo.LateralError + 0.08 * x.Geo.HeadingError.Degree;
-                    var quantity = _steerController.GetControlQuantity(e).InsideOf(-30, 30);
-                    Console.Write($"" +
-                       $"Kp: {_steerController.Kp:f3} ... " +
-                       $"Ki: {_steerController.Ki:f3} ... " +
-                       $"Kd: {_steerController.Kd:f3} ... ");
-                    SetSteeringAngle(new(quantity, AngleType.Degree));
+                    var angle = _steerController.GetSteeringAngle(
+                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle, x.Vehicle.VehicleSpeed);
+                    SetSteeringAngle(angle);
+                    Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
                 .ToTask();
         }

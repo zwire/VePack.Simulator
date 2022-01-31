@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp", "WpfApp\WpfApp.csp
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VePack", "..\VePack\VePack\VePack.csproj", "{AB0D761D-81FF-4C94-AF70-B7809DC62D2B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GrpcClient", "GrpcClient\GrpcClient.csproj", "{89617D05-E3E2-418C-8743-47CD43ABCCFE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GrpcClient", "GrpcClient\GrpcClient.csproj", "{89617D05-E3E2-418C-8743-47CD43ABCCFE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mpc", "..\ControlSimulator\Mpc\Mpc.csproj", "{D4ACE274-AA17-4FDE-893C-7105C8882873}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{89617D05-E3E2-418C-8743-47CD43ABCCFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{89617D05-E3E2-418C-8743-47CD43ABCCFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{89617D05-E3E2-418C-8743-47CD43ABCCFE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4ACE274-AA17-4FDE-893C-7105C8882873}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4ACE274-AA17-4FDE-893C-7105C8882873}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4ACE274-AA17-4FDE-893C-7105C8882873}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4ACE274-AA17-4FDE-893C-7105C8882873}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
