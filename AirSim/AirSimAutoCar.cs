@@ -47,7 +47,7 @@ namespace AirSim
             _stream = _client.GetStream();
             _car = new(_stream);
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            _steerController = new(new KinematicSteeringModel(new(35, AngleType.Degree), 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5));
+            _steerController = new(new KinematicSteeringModel(new(35, AngleType.Degree), 1.5, 3.0, 1.5, 1.0, 1.0, 1.0, 0.2), 10);
             _operation = new();
 
             var line = "";
@@ -67,7 +67,7 @@ namespace AirSim
                 {
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
                     var heading = x.Imu.Yaw;
-                    var position = MapHelper.WgsToUtm(wgs);
+                    var position = NaviHelper.WgsToUtm(wgs);
                     var lookAheadDistance = Math.Abs(x.VehicleSpeed) + 1;
                     var geoInfo = _navigator?.Update(position, heading, lookAheadDistance);
                     return new CompositeInfo<CarInformation>(
@@ -97,9 +97,9 @@ namespace AirSim
 
         public void SetMap(string mapFile, string plnFile = null)
         {
-            var map = MapHelper.LoadMapFromFile(mapFile);
+            var map = NaviHelper.LoadMapFromFile(mapFile);
             if (plnFile is not null)
-                map = MapHelper.ModifyMapByPlnFile(plnFile, map);
+                map = NaviHelper.ModifyMapByPlnFile(plnFile, map);
             _navigator = new(map, 3);
             _navigator.CurrentPathChanged.Finally(() => Dispose());
         }
