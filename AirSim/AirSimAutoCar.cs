@@ -26,8 +26,8 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        //private readonly NmpcSteeringController _steerController;
         private readonly NmpcSteeringController _steerController;
+        //private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private double _targetSpeed;
         private MapNavigator _navigator;
@@ -49,11 +49,17 @@ namespace AirSim
             _client = new("127.0.0.1", 3000);
             _stream = _client.GetStream();
             _car = new(_stream);
+            _operation = new();
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
             _steerController = new(new NmpcKinematicSteeringModel(
-                new(35, AngleType.Degree), 0.3, 5.0, 0.5, 1.5, 1.0, 1.0, 0.3)
+                new(35, AngleType.Degree), 10.0, 10.0, 1.0, 0.5, 1.0, 1.0, 3.0)
             );
-            _operation = new();
+            //_steerController = new(
+            //    new(2.0, 0.5), 
+            //    new(35, AngleType.Degree), 
+            //    new(5, AngleType.Degree),
+            //    1.0, new[] { 5, 8, 10 }
+            //);
 
             var line = "";
             if (mapFile is not null)
@@ -221,7 +227,7 @@ namespace AirSim
                 .Do(x =>
                 {
                     var angle = _steerController.GetSteeringAngle(
-                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle, 
+                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle,
                         x.Vehicle.VehicleSpeed / 3.6, curvature);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
