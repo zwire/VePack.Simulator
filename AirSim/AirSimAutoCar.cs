@@ -20,14 +20,13 @@ namespace AirSim
 
         private const string pythonExe = "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe";
         private const string pyFile = "..\\..\\..\\..\\AirSim\\airsim_server.py";
-        private const double _turnRadius = 5;
+        private const double _turnRadius = 6;
         private readonly AirSimConnector _car;
         private readonly Process _python;
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly NmpcSteeringController _steerController;
-        //private readonly PfcSteeringController _steerController;
+        private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private double _targetSpeed;
         private MapNavigator _navigator;
@@ -51,15 +50,13 @@ namespace AirSim
             _car = new(_stream);
             _operation = new();
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            _steerController = new(new NmpcKinematicSteeringModel(
-                new(35, AngleType.Degree), 10.0, 10.0, 1.0, 0.5, 1.0, 1.0, 3.0)
+            _steerController = new(
+                new(1.0, 1.0, 1.0),
+                new[] { 5, 8, 10 }, 
+                0.7,
+                new(35, AngleType.Degree),
+                new(5, AngleType.Degree)
             );
-            //_steerController = new(
-            //    new(2.0, 0.5), 
-            //    new(35, AngleType.Degree), 
-            //    new(5, AngleType.Degree),
-            //    1.0, new[] { 5, 8, 10 }
-            //);
 
             var line = "";
             if (mapFile is not null)
@@ -214,7 +211,6 @@ namespace AirSim
         private async Task FollowAsync(CancellationToken ct)
         {
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
-            //_steerController.Reset();
             var curvature = 0.0;
             if ((string)_navigator.CurrentPath.Id is "Turn Left")
                 curvature = -1.0 / _turnRadius;
@@ -226,9 +222,10 @@ namespace AirSim
                 .TakeUntil(_navigator.CurrentPathChanged)
                 .Do(x =>
                 {
+                    _steerController.SetParams(x.Vehicle.VehicleSpeed / 3.6, curvature);
                     var angle = _steerController.GetSteeringAngle(
-                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle,
-                        x.Vehicle.VehicleSpeed / 3.6, curvature);
+                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle
+                    );
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
