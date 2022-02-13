@@ -28,6 +28,7 @@ namespace AirSim
         private readonly Pid _speedController;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
+        private readonly bool _autoSteering;
         private double _targetSpeed;
         private MapNavigator _navigator;
         private CarOperation _operation;
@@ -41,7 +42,7 @@ namespace AirSim
 
         // ------ constructors ------ //
 
-        public AirSimAutoCar(string mapFile = null, string plnFile = null)
+        public AirSimAutoCar(string mapFile = null, string plnFile = null, bool autoSteering = true)
         {
             _python = new() { StartInfo = new(pythonExe) { Arguments = pyFile } };
             _python.Start();
@@ -49,6 +50,7 @@ namespace AirSim
             _stream = _client.GetStream();
             _car = new(_stream);
             _operation = new();
+            _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
             _steerController = new(
                 new(1.0, 1.0, 1.0),
@@ -159,14 +161,14 @@ namespace AirSim
             _car.Set(_operation);
         }
 
-
-        // ------ private methods ------ //
-
-        private void SetSteeringAngle(Angle angle)
+        public void SetSteeringAngle(Angle angle)
         {
-            _operation.SteeringAngle = new(angle.Degree.InsideOf(-30, 30), AngleType.Degree);
+            _operation.SteeringAngle = new(angle.Degree.InsideOf(-35, 35), AngleType.Degree);
             _car?.Set(_operation);
         }
+
+
+        // ------ private methods ------ //
 
         private void SetBrake(int level)
         {
@@ -220,6 +222,7 @@ namespace AirSim
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeUntil(x => ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
+                .Where(_ => _autoSteering)
                 .Do(x =>
                 {
                     _steerController.SetParams(x.Vehicle.VehicleSpeed / 3.6, curvature);
