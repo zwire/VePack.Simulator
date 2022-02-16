@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using AirSim;
 
 namespace ConsoleApp
@@ -8,11 +9,23 @@ namespace ConsoleApp
         static void Main(string[] args)
         {
             var prefix = "..\\..\\..\\..\\AirSim\\";
-            var car = new AirSimAutoCar(prefix + "sim.map", prefix + "sim.pln", false);
+            var car = new AirSimAutoCar(prefix + "sim.map", prefix + "sim.pln", true);
             car.Start();
-            car.InfoUpdated.Subscribe(x => Console.WriteLine($"Speed: {x.Vehicle.VehicleSpeed:f1}km/h, E: {x.Geo?.LateralError:f3}m, {x.Geo?.HeadingError.Degree:f0}deg"));
+
+            var count = 0;
+            while (File.Exists($"{count}.csv")) count++;
+            //var sw = new StreamWriter($"{count}.csv");
             var targetSpeed = 0.0;
             var targetAngle = 0.0;
+            car.InfoUpdated.Subscribe(x =>
+            {
+                var lateral = x.Geo.LateralError;
+                var heading = x.Geo.HeadingError;
+                var steer = x.Vehicle.SteeringAngle;
+                var speed = x.Vehicle.VehicleSpeed;
+                //sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6}");
+                Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f0}deg");
+            });
             while (true)
             {
                 if (Console.KeyAvailable)
@@ -41,6 +54,8 @@ namespace ConsoleApp
                 }
             }
         ESC:
+            //sw.Close();
+            //sw = null;
             car.Stop();
             car.Dispose();
         }

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Husty" Version="1.2.3" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.10.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@ using VePack;
 using VePack.Utilities;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers;
+using VePack.Plugin.Controllers.NeuralNetwork;
 
 namespace AirSim
 {
@@ -26,6 +27,7 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
+        private readonly NNSteeringModel _steerModel;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
@@ -52,12 +54,15 @@ namespace AirSim
             _operation = new();
             _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.002, 0, 0.003);
+            var net = NetworkGraph.Load("net.json");
+            _steerModel = new NNSteeringModel(net, 1.0, 1.0, 0.15);
             _steerController = new(
-                new(1.0, 1.0, 1.0),
-                new[] { 5, 8, 10 }, 
-                0.7,
+                _steerModel,
+                new[] { 7, 10, 12 }, 
+                1.0,
                 new(35, AngleType.Degree),
-                new(5, AngleType.Degree)
+                new(5, AngleType.Degree),
+                1.0, 1.0, 50.0
             );
 
             var line = "";
@@ -139,7 +144,7 @@ namespace AirSim
                })
                .Subscribe();
 
-            while (!_cts.IsCancellationRequested)
+            while (_autoSteering && !_cts.IsCancellationRequested)
             {
                 await FollowAsync(_cts.Token);
             }
@@ -222,13 +227,16 @@ namespace AirSim
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeUntil(x => ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
-                .Where(_ => _autoSteering)
                 .Do(x =>
                 {
-                    _steerController.SetParams(x.Vehicle.VehicleSpeed / 3.6, curvature);
-                    var angle = _steerController.GetSteeringAngle(
-                        x.Geo.LateralError, x.Geo.HeadingError, x.Vehicle.SteeringAngle
-                    );
+                    var lateral = x.Geo.LateralError;
+                    var heading = x.Geo.HeadingError;
+                    var steer = x.Vehicle.SteeringAngle;
+                    var speed = x.Vehicle.VehicleSpeed / 3.6;
+                    _steerModel.SetParams(speed, curvature);
+                    _steerModel.PredictNext(lateral, heading, steer, speed, curvature);
+                    _steerController.ResetParams();
+                    var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
