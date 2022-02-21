@@ -52,14 +52,14 @@ if __name__ == '__main__':
         while vehicle.isOpened:
             with lock:
                 vehicle.operate(stream.read().strip().split(','))
-                time.sleep(0.1)
+                time.sleep(0.02)
 
     def sendingLoop():
         while vehicle.isOpened:
             with lock:
                 state = vehicle.getState()
                 stream.write(','.join(str(s) for s in state))
-                time.sleep(0.1)
+                time.sleep(0.02)
 
     th1 = threading.Thread(target=receivingLoop)
     th2 = threading.Thread(target=sendingLoop)

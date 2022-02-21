@@ -2,10 +2,10 @@
 using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
-using System.Reactive.Linq;
-using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using VePack;
 using VePack.Utilities;
 using VePack.Plugin.Navigation;
@@ -21,13 +21,14 @@ namespace AirSim
 
         private const string pythonExe = "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe";
         private const string pyFile = "..\\..\\..\\..\\AirSim\\airsim_server.py";
-        private const double _turnRadius = 6;
+        private const double _margin = 1.0;
         private readonly AirSimConnector _car;
         private readonly Process _python;
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly NNSteeringModel _steerModel;
+        //private readonly NNSteeringModel _steerModel;
+        private readonly KinematicSteeringModel _steerModel;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
@@ -53,16 +54,16 @@ namespace AirSim
             _car = new(_stream);
             _operation = new();
             _autoSteering = autoSteering;
-            _speedController = new(PidType.Speed, 0.002, 0, 0.003);
-            var net = NetworkGraph.Load("net.json");
-            _steerModel = new NNSteeringModel(net, 1.0, 1.0, 0.15);
+            _speedController = new(PidType.Speed, 0.001, 0, 0.003);
+            //var net = NetworkGraph.Load("net.json");
+            //_steerModel = new NNSteeringModel(net, 1.0, 1.0, 0.1);
+            _steerModel = new KinematicSteeringModel(1.0, 1.0, 0.1);
             _steerController = new(
                 _steerModel,
                 new[] { 7, 10, 12 }, 
                 1.0,
                 new(35, AngleType.Degree),
-                new(5, AngleType.Degree),
-                1.0, 1.0, 50.0
+                new(10, AngleType.Degree)
             );
 
             var line = "";
@@ -89,7 +90,18 @@ namespace AirSim
                         x, x.Gnss, x.Imu, geoInfo
                     );
                 })
-                .TakeUntil(x => x?.Geo is null)
+                .TakeWhile(x =>
+                {
+                    if (x?.Geo is not null)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        Dispose();
+                        return false;
+                    }
+                })
                 .Publish();
             _connector = observable.Connect();
             InfoUpdated = observable;
@@ -116,14 +128,6 @@ namespace AirSim
                 map = NaviHelper.ModifyMapByPlnFile(plnFile, map);
             _navigator = new(map, 1e-3);
             _navigator.CurrentPathChanged.Finally(() => Dispose());
-            var paths = _navigator.MapData.Clone().Paths;
-            for (int i = 0; i < paths.Count - 2; i++)
-            {
-                if (i % 2 is 1)
-                    paths[i] = paths[i].GetReverse();
-                var turnPath = GenerateTurnPath(paths[i], paths[i + 1]);
-                _navigator.InsertPath(2 * i + 1, turnPath);
-            }
         }
 
         public async void Start()
@@ -146,6 +150,8 @@ namespace AirSim
 
             while (_autoSteering && !_cts.IsCancellationRequested)
             {
+                if (await IsToTurnAsync())
+                    await SwitchBackAsync();
                 await FollowAsync(_cts.Token);
             }
 
@@ -182,50 +188,35 @@ namespace AirSim
             _car.Set(_operation);
         }
 
-        private UtmPathData GenerateTurnPath(UtmPathData passedPath, UtmPathData targetPath)
+        private async Task<UtmPathData> GenerateTurnPath(UtmPathData passedPath, UtmPathData targetPath)
         {
             targetPath = NaviHelper.ModifyPathDirection(targetPath, passedPath.Points[^1]);
-            var entranceDirectionVector = new Vector2D(targetPath.Points[0], targetPath.Points[1]).UnitVector;
-            var desiredDirectionVector = new Vector2D(passedPath.Points[^1], targetPath.Points[0]).UnitVector;
-            var end = targetPath.Points[0] - entranceDirectionVector * 2;
-            var left = entranceDirectionVector.GetClockwiseAngleFrom(desiredDirectionVector) < Angle.Zero;
-            var d = passedPath.Points[^1].DistanceTo(targetPath.Points[0]);
-
-            if (passedPath.Points[^1].DistanceTo(targetPath.Points[0]) > _turnRadius * 2)
-            {
-                var arc2 = new Arc2D(end, end - desiredDirectionVector * _turnRadius, 
-                    new(left ? -90 : 90, AngleType.Degree)).GetReverse().ApproximateAsPoints(new(15, AngleType.Degree));
-                var start = passedPath.Points[^1] - entranceDirectionVector * 2;
-                var arc1 = new Arc2D(start, start + desiredDirectionVector * _turnRadius, 
-                    new(left ? 90 : -90, AngleType.Degree)).ApproximateAsPoints(new(15, AngleType.Degree));
-                var list = new List<UtmPointData>();
-                list.AddRange(arc1.Select(a => new UtmPointData(a)));
-                list.AddRange(arc2.Select(a => new UtmPointData(a)));
-                list.Add(new(list.LastOrDefault() + entranceDirectionVector * 0.1));
-                return new(list, left ? "Turn Left" : "Turn Right");
-            }
-            else
-            {
-                var arc = new Arc2D(end, end - desiredDirectionVector * _turnRadius,
-                    new(left ? -180 : 180, AngleType.Degree)).GetReverse().ApproximateAsPoints(new(15, AngleType.Degree));
-                var list = new List<UtmPointData>();
-                list.AddRange(arc.Select(a => new UtmPointData(a)));
-                list.Add(new(list.LastOrDefault() + entranceDirectionVector * 0.1));
-                return new(list, left ? "Turn Left" : "Turn Right");
-            }
+            var current = await InfoUpdated.FirstOrDefaultAsync();
+            var entranceDirectionVector = targetPath.GetEntranceDirectionVector().UnitVector;
+            var hypotenuseVector = new Vector2D(current.Geo.VehiclePosition, targetPath.Points[0] - entranceDirectionVector * _margin);
+            var interiorAngle = hypotenuseVector.GetClockwiseAngleFrom(entranceDirectionVector);
+            var radius = Math.Abs(hypotenuseVector.Length * Math.Cos(interiorAngle.Radian));
+            var curvature = 1.0 / radius;
+            var orthogonalDirectionVector = new Vector2D(passedPath.Points[^1], targetPath.Points[0]).UnitVector;
+            var end = targetPath.Points[0] - entranceDirectionVector * _margin;
+            var left = entranceDirectionVector.GetClockwiseAngleFrom(orthogonalDirectionVector) < Angle.Zero;
+            var arc = new Arc2D(end, end - orthogonalDirectionVector * radius,
+                new(left ? -90 : 90, AngleType.Degree)).GetReverse().ApproximateAsPoints(new(10, AngleType.Degree));
+            var list = new List<UtmPointData>();
+            list.Add(new(arc[0] - orthogonalDirectionVector * 0.1));
+            list.AddRange(arc.Select(a => new UtmPointData(a)));
+            list.Add(new(end + entranceDirectionVector * 0.1));
+            return new(list, left ? $"{-curvature}" : $"{curvature}");
         }
 
         private async Task FollowAsync(CancellationToken ct)
         {
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var curvature = 0.0;
-            if ((string)_navigator.CurrentPath.Id is "Turn Left")
-                curvature = -1.0 / _turnRadius;
-            if ((string)_navigator.CurrentPath.Id is "Turn Right")
-                curvature = 1.0 / _turnRadius;
+            double.TryParse((string)_navigator.CurrentPath.Id, out curvature);
             await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
-                .TakeUntil(x => ct.IsCancellationRequested)
+                .TakeWhile(x => !ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
                 .Do(x =>
                 {
@@ -233,14 +224,43 @@ namespace AirSim
                     var heading = x.Geo.HeadingError;
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
-                    _steerModel.SetParams(speed, curvature);
-                    _steerModel.PredictNext(lateral, heading, steer, speed, curvature);
+                    _steerModel.SetParams(speed, x.Geo.OnThePath ? curvature : 0);
+                    //_steerModel.PredictNext(lateral, heading, steer, speed, curvature);
                     _steerController.ResetParams();
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
                 .ToTask();
+        }
+
+        private async Task<bool> IsToTurnAsync()
+        {
+            return Math.Abs((await InfoUpdated.FirstOrDefaultAsync()).Geo.HeadingError.Degree) > 90;
+        }
+
+        private async Task SwitchBackAsync()
+        {
+            var ckpt1 = await InfoUpdated.FirstOrDefaultAsync();
+            var left = ckpt1.Geo.LateralError < 0;
+            await InfoUpdated.TakeUntil(x => x.Geo.VehiclePosition.DistanceTo(ckpt1.Geo.VehiclePosition) > _margin);
+            SetSteeringAngle(new(left ? -30 : 30, AngleType.Degree));
+            var targetPath = _navigator.CurrentPath;
+            var entranceDirection = targetPath.GetEntranceDirectionVector().ClockwiseAngleFromY;
+            var ckpt2 = await InfoUpdated.TakeUntil(x => Math.Abs(x.Geo.HeadingError.Degree) < 95).ToTask();
+            SetBrake(2);
+            await Task.Delay(100);
+            SetBrake(0);
+            SetSteeringAngle(Angle.Zero);
+            SetVehicleSpeed(-_targetSpeed);
+            var radius = ckpt1.Geo.LateralError - ckpt2.Geo.LateralError;
+            await InfoUpdated.TakeUntil(x => left ? x.Geo.LateralError < radius : x.Geo.LateralError > radius).ToTask();
+            SetBrake(2);
+            await Task.Delay(100);
+            var turnPath = await GenerateTurnPath(_navigator.MapData.Paths[_navigator.CurrentPathIndex - 1], _navigator.CurrentPath);
+            _navigator.InsertPath(_navigator.CurrentPathIndex, turnPath);
+            SetBrake(0);
+            SetVehicleSpeed(-_targetSpeed);
         }
 
     }

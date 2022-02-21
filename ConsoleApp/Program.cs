@@ -44,11 +44,11 @@ namespace ConsoleApp
                             break;
                         case ConsoleKey.LeftArrow:
                             car.SetSteeringAngle(new(--targetAngle, VePack.Utilities.AngleType.Degree));
-                            Console.WriteLine($"---> target speed {targetAngle:f1} deg");
+                            Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                         case ConsoleKey.RightArrow:
                             car.SetSteeringAngle(new(++targetAngle, VePack.Utilities.AngleType.Degree));
-                            Console.WriteLine($"---> target speed {targetAngle:f1} deg");
+                            Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                     }
                 }
