@@ -24,7 +24,7 @@ namespace ConsoleApp
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed;
                 //sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6}");
-                Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f0}deg");
+                Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f1}deg");
             });
             while (true)
             {

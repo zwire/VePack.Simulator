@@ -21,14 +21,15 @@ namespace AirSim
 
         private const string pythonExe = "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe";
         private const string pyFile = "..\\..\\..\\..\\AirSim\\airsim_server.py";
-        private const double _margin = 1.0;
+        private const double _margin = 1.5;
+        private const double _turnRadius = 5.8;
         private readonly AirSimConnector _car;
         private readonly Process _python;
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        //private readonly NNSteeringModel _steerModel;
-        private readonly KinematicSteeringModel _steerModel;
+        private readonly NNSteeringModel _steerModel;
+        //private readonly KinematicSteeringModel _steerModel;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
@@ -55,12 +56,12 @@ namespace AirSim
             _operation = new();
             _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            //var net = NetworkGraph.Load("net.json");
-            //_steerModel = new NNSteeringModel(net, 1.0, 1.0, 0.1);
-            _steerModel = new KinematicSteeringModel(1.0, 1.0, 0.1);
+            var net = NetworkGraph.Load("net.json");
+            _steerModel = new NNSteeringModel(net, 1.5, 1.5, 0.15);
+            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.15);
             _steerController = new(
                 _steerModel,
-                new[] { 7, 10, 12 }, 
+                new[] { 5, 8, 10 },
                 1.0,
                 new(35, AngleType.Degree),
                 new(10, AngleType.Degree)
@@ -150,9 +151,9 @@ namespace AirSim
 
             while (_autoSteering && !_cts.IsCancellationRequested)
             {
-                if (await IsToTurnAsync())
-                    await SwitchBackAsync();
                 await FollowAsync(_cts.Token);
+                if (await IsToTurnAsync())
+                    await TurnAsync();
             }
 
         }
@@ -188,33 +189,80 @@ namespace AirSim
             _car.Set(_operation);
         }
 
-        private async Task<UtmPathData> GenerateTurnPath(UtmPathData passedPath, UtmPathData targetPath)
+        private (UtmPathData, UtmPathData) GenerateTurnPath(UtmPathData passedPath, UtmPathData targetPath)
         {
+            // 次パスの向きを修正
             targetPath = NaviHelper.ModifyPathDirection(targetPath, passedPath.Points[^1]);
-            var current = await InfoUpdated.FirstOrDefaultAsync();
-            var entranceDirectionVector = targetPath.GetEntranceDirectionVector().UnitVector;
-            var hypotenuseVector = new Vector2D(current.Geo.VehiclePosition, targetPath.Points[0] - entranceDirectionVector * _margin);
-            var interiorAngle = hypotenuseVector.GetClockwiseAngleFrom(entranceDirectionVector);
-            var radius = Math.Abs(hypotenuseVector.Length * Math.Cos(interiorAngle.Radian));
-            var curvature = 1.0 / radius;
-            var orthogonalDirectionVector = new Vector2D(passedPath.Points[^1], targetPath.Points[0]).UnitVector;
-            var end = targetPath.Points[0] - entranceDirectionVector * _margin;
-            var left = entranceDirectionVector.GetClockwiseAngleFrom(orthogonalDirectionVector) < Angle.Zero;
-            var arc = new Arc2D(end, end - orthogonalDirectionVector * radius,
-                new(left ? -90 : 90, AngleType.Degree)).GetReverse().ApproximateAsPoints(new(10, AngleType.Degree));
-            var list = new List<UtmPointData>();
-            list.Add(new(arc[0] - orthogonalDirectionVector * 0.1));
-            list.AddRange(arc.Select(a => new UtmPointData(a)));
-            list.Add(new(end + entranceDirectionVector * 0.1));
-            return new(list, left ? $"{-curvature}" : $"{curvature}");
+            // 次パスの入口周辺の位置と座標系をとる
+            var dx = targetPath.GetEntranceDirectionVector().UnitVector;
+            var start = passedPath.Points[^1] - dx * _margin;
+            var end = targetPath.Points[0] - dx * _margin;
+            var edgeVector = new Vector2D(start, end).UnitVector;
+            var left = edgeVector.GetClockwiseAngleFrom(dx) > Angle.Zero;
+            var dy = dx.Rotate(new(left ? -90 : 90, AngleType.Degree));
+
+            // パス端のズレ角度
+            var slippage = edgeVector.GetClockwiseAngleFrom(dy);
+            if (left)
+                slippage = -slippage;
+            // 前後半の旋回半径
+            var r1 = 1 / (1 + Math.Sin(slippage.Radian));
+            var r2 = 1 / (1 - Math.Sin(slippage.Radian));
+            // 小さい方が指定した半径になるように揃える
+            var scale = _turnRadius / Math.Min(r1, r2);
+            r1 *= scale;
+            r2 *= scale;
+            // 前後半の旋回中心
+            var o1 = start + r1 * dy;
+            var o2 = end - r2 * dy;
+
+            // このままだと無駄に大きい円ができるので、大きい円を縮める
+            var e1 = new Arc2D(start, o1, new((90 + slippage.Degree) * (left ? 1 : -1), AngleType.Degree)).End;
+            var e2 = new Arc2D(end, o2, new((90 - slippage.Degree) * (left ? -1 : 1), AngleType.Degree)).End;
+            var headlandLine = new Line2D(e1, e2);
+            var hypotenuseLength = _turnRadius / Math.Cos(new Angle((90 - slippage.Degree) / 2, AngleType.Degree).Radian);
+            if (r1 < r2)
+            {
+                var targetLine = new Line2D(targetPath.Points[0], targetPath.Points[1]);
+                var intersection = headlandLine.GetIntersection(targetLine);
+                var direction = new Vector2D(intersection, o2).UnitVector;
+                o2 = intersection + direction * hypotenuseLength;
+                end = targetLine.GetPerpendicularFoot(o2);
+                r2 = r1;
+            }
+            else
+            {
+                var targetLine = new Line2D(passedPath.Points[^2], passedPath.Points[^1]);
+                var intersection = headlandLine.GetIntersection(targetLine);
+                var direction = new Vector2D(intersection, o1).UnitVector;
+                o1 = intersection + direction * hypotenuseLength;
+                start = targetLine.GetPerpendicularFoot(o1);
+                r1 = r2;
+            }
+
+            // 弧を得る
+            var arc1 = new Arc2D(start, o1, new((90 + slippage.Degree) * (left ? 1 : -1), AngleType.Degree)).ApproximateAsPoints(new(5, AngleType.Degree));
+            var arc2 = new Arc2D(end, o2, new((90 - slippage.Degree) * (left ? -1 : 1), AngleType.Degree)).GetReverse().ApproximateAsPoints(new(5, AngleType.Degree));
+
+            // 端におめかししてリスト化
+            var list1 = new List<UtmPointData>();
+            list1.Add(new(arc1[0] + dx * 0.1));
+            list1.AddRange(arc1.Select(a => new UtmPointData(a)));
+            list1.Add(new(arc1[^1] + edgeVector * 0.1));
+            var list2 = new List<UtmPointData>();
+            list2.Add(new(arc2[0] - edgeVector * 0.1));
+            list2.AddRange(arc2.Select(a => new UtmPointData(a)));
+            list2.Add(new(arc2[^1] + dx * 0.1));
+
+            return new(new(list1, $"{(left ? -1 : 1) / r1}"), new(list2, $"{(left ? -1 : 1) / r2}"));
         }
 
-        private async Task FollowAsync(CancellationToken ct)
+        private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var curvature = 0.0;
             double.TryParse((string)_navigator.CurrentPath.Id, out curvature);
-            await InfoUpdated
+            return await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
                 .TakeUntil(_navigator.CurrentPathChanged)
@@ -225,7 +273,7 @@ namespace AirSim
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
                     _steerModel.SetParams(speed, x.Geo.OnThePath ? curvature : 0);
-                    //_steerModel.PredictNext(lateral, heading, steer, speed, curvature);
+                    _steerModel.PredictNext(lateral, heading, steer, speed, x.Geo.OnThePath ? curvature : 0);
                     _steerController.ResetParams();
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
@@ -239,28 +287,40 @@ namespace AirSim
             return Math.Abs((await InfoUpdated.FirstOrDefaultAsync()).Geo.HeadingError.Degree) > 90;
         }
 
-        private async Task SwitchBackAsync()
+        private async Task TurnAsync()
         {
-            var ckpt1 = await InfoUpdated.FirstOrDefaultAsync();
-            var left = ckpt1.Geo.LateralError < 0;
-            await InfoUpdated.TakeUntil(x => x.Geo.VehiclePosition.DistanceTo(ckpt1.Geo.VehiclePosition) > _margin);
-            SetSteeringAngle(new(left ? -30 : 30, AngleType.Degree));
-            var targetPath = _navigator.CurrentPath;
-            var entranceDirection = targetPath.GetEntranceDirectionVector().ClockwiseAngleFromY;
-            var ckpt2 = await InfoUpdated.TakeUntil(x => Math.Abs(x.Geo.HeadingError.Degree) < 95).ToTask();
-            SetBrake(2);
-            await Task.Delay(100);
-            SetBrake(0);
-            SetSteeringAngle(Angle.Zero);
-            SetVehicleSpeed(-_targetSpeed);
-            var radius = ckpt1.Geo.LateralError - ckpt2.Geo.LateralError;
-            await InfoUpdated.TakeUntil(x => left ? x.Geo.LateralError < radius : x.Geo.LateralError > radius).ToTask();
-            SetBrake(2);
-            await Task.Delay(100);
-            var turnPath = await GenerateTurnPath(_navigator.MapData.Paths[_navigator.CurrentPathIndex - 1], _navigator.CurrentPath);
-            _navigator.InsertPath(_navigator.CurrentPathIndex, turnPath);
-            SetBrake(0);
-            SetVehicleSpeed(-_targetSpeed);
+            // 先にパスを得る
+            var (first, second) = GenerateTurnPath(_navigator.MapData.Paths[_navigator.CurrentPathIndex - 1], _navigator.CurrentPath);
+            // 前半パスを追従
+            _navigator.InsertPath(_navigator.CurrentPathIndex, first);
+            var ckpt = await FollowAsync(_cts.Token);
+
+            // バックが必要かの判断
+            if (!IsReadyToEnter(ckpt.Geo, second))
+            {
+                SetSteeringAngle(Angle.Zero);
+                SetBrake(2);
+                await Task.Delay(100);
+                SetBrake(0);
+                SetVehicleSpeed(-_targetSpeed);
+                // secondの始点前までバック
+                await InfoUpdated.TakeWhile(x => !IsReadyToEnter(x.Geo, second)).ToTask();
+                SetBrake(2);
+                await Task.Delay(100);
+                SetBrake(0);
+                SetVehicleSpeed(-_targetSpeed);
+            }
+
+            // 後半パスを追従
+            _navigator.InsertPath(_navigator.CurrentPathIndex, second);
+            await FollowAsync(_cts.Token);
+
+            bool IsReadyToEnter(GeometricInformation geo, UtmPathData path)
+            {
+                var diff = new Vector2D(geo.VehiclePosition, path.Points[0]).ClockwiseAngleFromY - geo.VehicleHeading;
+                return Math.Abs(diff.Degree) < 90;
+            }
+
         }
 
     }
