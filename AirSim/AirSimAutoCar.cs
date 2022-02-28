@@ -71,9 +71,9 @@ namespace AirSim
             if (mapFile is not null)
             {
                 SetMap(mapFile, plnFile);
-                var iniPoint = _navigator.MapData.Paths[0].Points[0];
+                var iniPoint = _navigator.MapData.Paths[0][0];
                 foreach (var path in _navigator.MapData.Paths)
-                    foreach (var p in path.Points)
+                    foreach (var p in path)
                         line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
             }
             _stream.WriteString(line);
@@ -83,12 +83,9 @@ namespace AirSim
                 .Select(x =>
                 {
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
-                    var heading = x.Imu.Yaw;
-                    var position = NaviHelper.WgsToUtm(wgs);
-                    var geoInfo = _navigator?.Update(position, heading, 1e-3);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        x, x.Gnss, x.Imu, geoInfo
+                        x, x.Gnss, x.Imu, _navigator?.Update(wgs.ToUtm(), x.Imu.Yaw, 1e-3)
                     );
                 })
                 .TakeWhile(x =>
@@ -192,13 +189,13 @@ namespace AirSim
         private (UtmPathData, UtmPathData) GenerateTurnPath(UtmPathData passedPath, UtmPathData targetPath)
         {
             // 次パスの向きを修正
-            targetPath = NaviHelper.ModifyPathDirection(targetPath, passedPath.Points[^1]);
+            targetPath = targetPath.ModifyPathDirection(passedPath[^1]);
             // 次パスの入口周辺の位置と座標系をとる
-            var dx = targetPath.GetEntranceDirectionVector().UnitVector;
-            var start = passedPath.Points[^1] - dx * _margin;
-            var end = targetPath.Points[0] - dx * _margin;
+            var dx = targetPath.GetSegment(0).ToVector2D().UnitVector;
+            var start = passedPath[^1] - dx * _margin;
+            var end = targetPath[0] - dx * _margin;
             var edgeVector = new Vector2D(start, end).UnitVector;
-            var left = edgeVector.GetClockwiseAngleFrom(dx) > Angle.Zero;
+            var left = start.IsOnTheLeft(targetPath.GetSegment(0));
             var dy = dx.Rotate(new(left ? -90 : 90, AngleType.Degree));
 
             // パス端のズレ角度
@@ -223,7 +220,7 @@ namespace AirSim
             var hypotenuseLength = _turnRadius / Math.Cos(new Angle((90 - slippage.Degree) / 2, AngleType.Degree).Radian);
             if (r1 < r2)
             {
-                var targetLine = new Line2D(targetPath.Points[0], targetPath.Points[1]);
+                var targetLine = targetPath.GetSegment(0);
                 var intersection = headlandLine.GetIntersection(targetLine);
                 var direction = new Vector2D(intersection, o2).UnitVector;
                 o2 = intersection + direction * hypotenuseLength;
@@ -232,7 +229,7 @@ namespace AirSim
             }
             else
             {
-                var targetLine = new Line2D(passedPath.Points[^2], passedPath.Points[^1]);
+                var targetLine = passedPath.GetSegment(-1);
                 var intersection = headlandLine.GetIntersection(targetLine);
                 var direction = new Vector2D(intersection, o1).UnitVector;
                 o1 = intersection + direction * hypotenuseLength;
@@ -294,33 +291,23 @@ namespace AirSim
             // 前半パスを追従
             _navigator.InsertPath(_navigator.CurrentPathIndex, first);
             var ckpt = await FollowAsync(_cts.Token);
-
+            var seg = second.GetSegment(0);
             // バックが必要かの判断
-            if (!IsReadyToEnter(ckpt.Geo, second))
+            if (ckpt.Geo.VehiclePosition.IsInFrontOf(seg))
             {
                 SetSteeringAngle(Angle.Zero);
                 SetBrake(2);
-                await Task.Delay(100);
-                SetBrake(0);
+                await Task.Delay(200);
                 SetVehicleSpeed(-_targetSpeed);
                 // secondの始点前までバック
-                await InfoUpdated.TakeWhile(x => !IsReadyToEnter(x.Geo, second)).ToTask();
+                await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask();
                 SetBrake(2);
-                await Task.Delay(100);
-                SetBrake(0);
+                await Task.Delay(200);
                 SetVehicleSpeed(-_targetSpeed);
             }
-
             // 後半パスを追従
             _navigator.InsertPath(_navigator.CurrentPathIndex, second);
             await FollowAsync(_cts.Token);
-
-            bool IsReadyToEnter(GeometricInformation geo, UtmPathData path)
-            {
-                var diff = new Vector2D(geo.VehiclePosition, path.Points[0]).ClockwiseAngleFromY - geo.VehicleHeading;
-                return Math.Abs(diff.Degree) < 90;
-            }
-
         }
 
     }
