@@ -56,13 +56,12 @@ namespace AirSim
             _operation = new();
             _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            var net = NetworkGraph.Load("net.json");
-            _steerModel = new NNSteeringModel(net, 1.5, 1.5, 0.15);
-            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.15);
+            _steerModel = new NNSteeringModel(NetworkGraph.Load("latest.json"), 4, 1.5, 1.5, 0.1);
+            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
             _steerController = new(
                 _steerModel,
                 new[] { 5, 8, 10 },
-                1.0,
+                5.0,
                 new(35, AngleType.Degree),
                 new(10, AngleType.Degree)
             );
@@ -77,7 +76,7 @@ namespace AirSim
                         line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
             }
             _stream.WriteString(line);
-            _car.ConnectSendingStream(TimeSpan.FromMilliseconds(100));
+            _car.ConnectSendingStream(TimeSpan.FromMilliseconds(10));
             var observable = _car.ConnectReceivingStream(TimeSpan.FromMilliseconds(100))
                 .Finally(() => Dispose())
                 .Select(x =>
@@ -256,9 +255,10 @@ namespace AirSim
 
         private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
+            
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
-            var curvature = 0.0;
-            double.TryParse((string)_navigator.CurrentPath.Id, out curvature);
+            var pathCurvature = 0.0;
+            double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
             return await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
@@ -269,13 +269,15 @@ namespace AirSim
                     var heading = x.Geo.HeadingError;
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
-                    _steerModel.SetParams(speed, x.Geo.OnThePath ? curvature : 0);
-                    _steerModel.PredictNext(lateral, heading, steer, speed, x.Geo.OnThePath ? curvature : 0);
+                    var curvature = x.Geo.OnThePath ? pathCurvature : 0;
+                    _steerModel.SetParams(speed, curvature);
+                    _steerModel.PredictDynamics(lateral, heading, steer, speed, curvature);
                     _steerController.ResetParams();
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
+                .Finally(() => _steerModel.SaveModel("latest.json"))
                 .ToTask();
         }
 
@@ -296,6 +298,7 @@ namespace AirSim
             if (ckpt.Geo.VehiclePosition.IsInFrontOf(seg))
             {
                 SetSteeringAngle(Angle.Zero);
+                _steerController.SetDefaultSteer(Angle.Zero);
                 SetBrake(2);
                 await Task.Delay(200);
                 SetVehicleSpeed(-_targetSpeed);
