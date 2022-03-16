@@ -8,9 +8,9 @@ using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using VePack;
 using VePack.Utilities;
+using VePack.Utilities.NeuralNetwork;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers;
-using VePack.Plugin.Controllers.NeuralNetwork;
 
 namespace AirSim
 {
@@ -272,7 +272,7 @@ namespace AirSim
                     var curvature = x.Geo.OnThePath ? pathCurvature : 0;
                     _steerModel.SetParams(speed, curvature);
                     _steerModel.PredictDynamics(lateral, heading, steer, speed, curvature);
-                    _steerController.ResetParams();
+                    _steerController.CalcParams();
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
@@ -298,7 +298,7 @@ namespace AirSim
             if (ckpt.Geo.VehiclePosition.IsInFrontOf(seg))
             {
                 SetSteeringAngle(Angle.Zero);
-                _steerController.SetDefaultSteer(Angle.Zero);
+                _steerController.Reset();
                 SetBrake(2);
                 await Task.Delay(200);
                 SetVehicleSpeed(-_targetSpeed);
