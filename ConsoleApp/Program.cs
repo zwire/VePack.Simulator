@@ -14,7 +14,8 @@ namespace ConsoleApp
 
             var count = 0;
             while (File.Exists($"{count}.csv")) count++;
-            //var sw = new StreamWriter($"{count}.csv");
+            StreamWriter sw = null;
+            //sw = new StreamWriter($"{count}.csv");
             var targetSpeed = 0.0;
             var targetAngle = 0.0;
             car.InfoUpdated.Subscribe(x =>
@@ -23,7 +24,7 @@ namespace ConsoleApp
                 var heading = x.Geo.HeadingError;
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed;
-                //sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6}");
+                sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6}");
                 Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f1}deg");
             });
             while (true)
@@ -54,9 +55,8 @@ namespace ConsoleApp
                 }
             }
         ESC:
-            //sw.Close();
-            //sw = null;
-            car.Stop();
+            sw?.Close();
+            sw = null;
             car.Dispose();
         }
     }
