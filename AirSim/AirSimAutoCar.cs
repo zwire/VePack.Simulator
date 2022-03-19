@@ -56,7 +56,7 @@ namespace AirSim
             _operation = new();
             _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            _steerModel = new NNSteeringModel(NetworkGraph.Load("..\\..\\..\\..\\AirSim\\latest.ydn"), 4, 1.5, 1.5, 0.1);
+            _steerModel = new NNSteeringModel(NetworkGraph.Load("..\\..\\..\\..\\AirSim\\latest.ydn"), -1, 1.5, 1.5, 0.1);
             //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
             _steerController = new(
                 _steerModel,
@@ -155,10 +155,11 @@ namespace AirSim
 
         public void Stop()
         {
-            _cts?.Cancel();
             _operation = new() { FootBrake = 2 };
             _car.Set(_operation);
-            InfoUpdated.Where(x => x is not null).TakeUntil(x => x.Vehicle.VehicleSpeed < 0.1).ToTask().Wait();
+            if (!_cts.IsCancellationRequested)
+                InfoUpdated.Where(x => x is not null).TakeUntil(x => x.Vehicle.VehicleSpeed < 0.1).ToTask().Wait();
+            _cts?.Cancel();
         }
 
         public void SetVehicleSpeed(double speed)
@@ -276,7 +277,7 @@ namespace AirSim
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
-                .Finally(() => _steerModel.SaveModel("latest.json"))
+                .Finally(() => _steerModel.SaveModel("latest.ydn"))
                 .ToTask();
         }
 
