@@ -123,10 +123,11 @@ namespace GrpcClient
                         TargetVehicleSpeed = _targetVehicleSpeed,
                         ActualVehicleSpeed = (float)x.Vehicle.VehicleSpeed,
                         Latitude = x.Gnss.Latitude,
-                        Longitude = x.Gnss.Longitude
+                        Longitude = x.Gnss.Longitude,
+                        Heading = x.Imu.Yaw.Degree
                     };
                     await propertyCall.RequestStream.WriteAsync(property);
-                    _logger.ZLogInformation($"client --> server : {property}");
+                    //_logger.ZLogInformation($"client --> server : {property}");
                 })
                 .ToTask();
         }
