@@ -49,6 +49,7 @@ namespace AirSim
         public AirSimAutoCar(string mapFile = null, string plnFile = null, bool autoSteering = true)
         {
             _cts = new();
+            _cts.Cancel();
             _python = new() { StartInfo = new(pythonExe) { Arguments = pyFile } };
             _python.Start();
             _client = new("127.0.0.1", 3000);
