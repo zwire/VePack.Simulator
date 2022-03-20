@@ -56,7 +56,7 @@ namespace AirSim
             _operation = new();
             _autoSteering = autoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            _steerModel = new NNSteeringModel(NetworkGraph.Load("..\\..\\..\\..\\AirSim\\latest.ydn"), -1, 1.5, 1.5, 0.1);
+            _steerModel = new NNSteeringModel(NetworkGraph.Load("..\\..\\..\\..\\AirSim\\latest.ydn"), null, 1.5, 1.5, 0.1);
             //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
             _steerController = new(
                 _steerModel,
