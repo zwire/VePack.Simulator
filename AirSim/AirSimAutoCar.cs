@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using VePack;
 using VePack.Utilities;
 using VePack.Utilities.NeuralNetwork;
@@ -14,22 +15,18 @@ using VePack.Plugin.Controllers;
 
 namespace AirSim
 {
-    public class AirSimAutoCar : IAutoVehicle<CarInformation>
+    public sealed class AirSimAutoCar : IAutoVehicle<CarInformation>
     {
 
-        // ------ fields ------ //
+        #region fields
 
-        private const string pythonExe = "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe";
-        private const string pyFile = "..\\..\\..\\..\\AirSim\\airsim_server.py";
-        private const double _margin = 1.5;
-        private const double _turnRadius = 5.8;
+        private readonly Rootobject _config;
         private readonly AirSimConnector _car;
         private readonly Process _python;
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
         private readonly NNSteeringModel _steerModel;
-        //private readonly KinematicSteeringModel _steerModel;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
@@ -38,40 +35,51 @@ namespace AirSim
         private CarOperation _operation;
         private CancellationTokenSource _cts;
 
+        #endregion fields
 
-        // ------ properties ------ //
+
+        #region properties
 
         public IObservable<CompositeInfo<CarInformation>> InfoUpdated { get; }
 
+        #endregion properties
 
-        // ------ constructors ------ //
 
-        public AirSimAutoCar(string mapFile = null, string plnFile = null, bool autoSteering = true)
+        #region constructors
+
+        public AirSimAutoCar()
         {
+            _config = new ConfigurationBuilder().AddJsonFile("rootsettings.json").Build().Get<Rootobject>();
             _cts = new();
             _cts.Cancel();
-            _python = new() { StartInfo = new(pythonExe) { Arguments = pyFile } };
+            _python = new() { StartInfo = new(_config.PythonExe) { Arguments = _config.PyFile} };
             _python.Start();
             _client = new("127.0.0.1", 3000);
             _stream = _client.GetStream();
             _car = new(_stream);
             _operation = new();
-            _autoSteering = autoSteering;
+            _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            _steerModel = new NNSteeringModel(NetworkGraph.Load("..\\..\\..\\..\\AirSim\\latest.ydn"), null, 1.5, 1.5, 0.1);
+            var v = _config.VehicleModelParams;
+            _steerModel = new NNSteeringModel(
+                NetworkGraph.Load(_config.NNSteeringModelFile), 
+                _config.NNTrainBatchSize, 
+                v.Lf, v.Lr, v.TimeConstant
+            );
             //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
+            var s = _config.SteeringControllerParams;
             _steerController = new(
                 _steerModel,
-                new[] { 5, 8, 10 },
-                5.0,
+                s.PfcCoincidenceIndexes,
+                s.PfcControlGain,
                 new(35, AngleType.Degree),
                 new(10, AngleType.Degree)
             );
 
             var line = "";
-            if (mapFile is not null)
+            if (_config.MapFile is not null && _config.MapFile is not "")
             {
-                SetMap(mapFile, plnFile);
+                SetMap(_config.MapFile, _config.PlnFile);
                 var iniPoint = _navigator.MapData.Paths[0][0];
                 foreach (var path in _navigator.MapData.Paths)
                     foreach (var p in path)
@@ -86,7 +94,7 @@ namespace AirSim
                     var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        x, x.Gnss, x.Imu, _navigator?.Update(wgs.ToUtm(), x.Imu.Yaw, 1e-3)
+                        x, x.Gnss, x.Imu, _navigator?.Update(wgs.ToUtm(), x.Imu.Yaw)
                     );
                 })
                 .TakeWhile(x =>
@@ -106,8 +114,10 @@ namespace AirSim
             InfoUpdated = observable;
         }
 
+        #endregion constructors
 
-        // ------ public methods ------ //
+
+        #region public methods
 
         public void Dispose()
         {
@@ -122,9 +132,9 @@ namespace AirSim
         public void SetMap(string mapFile, string plnFile = null)
         {
             var map = NaviHelper.LoadMapFromFile(mapFile);
-            if (plnFile is not null)
+            if (plnFile is not null && plnFile is not "")
                 map = NaviHelper.ModifyMapByPlnFile(plnFile, map);
-            _navigator = new(map, 1e-3);
+            _navigator = new(map);
             _navigator.CurrentPathChanged.Finally(() => Dispose());
         }
 
@@ -177,8 +187,10 @@ namespace AirSim
             _car?.Set(_operation);
         }
 
+        #endregion public methods
 
-        // ------ private methods ------ //
+
+        #region private methods
 
         private void SetBrake(int level)
         {
@@ -193,8 +205,8 @@ namespace AirSim
             targetPath = targetPath.ModifyPathDirection(passedPath[^1]);
             // 次パスの入口周辺の位置と座標系をとる
             var dx = targetPath.GetSegment(0).ToVector2D().UnitVector;
-            var start = passedPath[^1] - dx * _margin;
-            var end = targetPath[0] - dx * _margin;
+            var start = passedPath[^1] - dx * _config.PathEndMargin;
+            var end = targetPath[0] - dx * _config.PathEndMargin;
             var edgeVector = new Vector2D(start, end).UnitVector;
             var left = start.IsOnTheLeft(targetPath.GetSegment(0));
             var dy = dx.Rotate(new(left ? -90 : 90, AngleType.Degree));
@@ -207,7 +219,7 @@ namespace AirSim
             var r1 = 1 / (1 + Math.Sin(slippage.Radian));
             var r2 = 1 / (1 - Math.Sin(slippage.Radian));
             // 小さい方が指定した半径になるように揃える
-            var scale = _turnRadius / Math.Min(r1, r2);
+            var scale = _config.TurnRadius / Math.Min(r1, r2);
             r1 *= scale;
             r2 *= scale;
             // 前後半の旋回中心
@@ -218,7 +230,7 @@ namespace AirSim
             var e1 = new Arc2D(start, o1, new((90 + slippage.Degree) * (left ? 1 : -1), AngleType.Degree)).End;
             var e2 = new Arc2D(end, o2, new((90 - slippage.Degree) * (left ? -1 : 1), AngleType.Degree)).End;
             var headlandLine = new Line2D(e1, e2);
-            var hypotenuseLength = _turnRadius / Math.Cos(new Angle((90 - slippage.Degree) / 2, AngleType.Degree).Radian);
+            var hypotenuseLength = _config.TurnRadius / Math.Cos(new Angle((90 - slippage.Degree) / 2, AngleType.Degree).Radian);
             if (r1 < r2)
             {
                 var targetLine = targetPath.GetSegment(0);
@@ -257,10 +269,11 @@ namespace AirSim
 
         private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
-            
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var pathCurvature = 0.0;
             double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
+            if (pathCurvature is 0)
+                _navigator.CurrentPath.ExtendLast(2);
             return await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
@@ -314,6 +327,8 @@ namespace AirSim
             _navigator.InsertPath(_navigator.CurrentPathIndex, second);
             await FollowAsync(_cts.Token);
         }
+
+        #endregion private methods
 
     }
 }

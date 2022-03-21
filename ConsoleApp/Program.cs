@@ -8,8 +8,8 @@ namespace ConsoleApp
     {
         static void Main(string[] args)
         {
-            var prefix = "..\\..\\..\\..\\AirSim\\";
-            var car = new AirSimAutoCar(prefix + "sim.map", prefix + "sim.pln", true);
+            
+            var car = new AirSimAutoCar();
             car.Start();
 
             var count = 0;

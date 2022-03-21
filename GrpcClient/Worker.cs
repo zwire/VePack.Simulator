@@ -31,8 +31,7 @@ namespace GrpcClient
             _hostAppLifetime = hostAppLifetime;
             _config = config;
             _logger = logger;
-            var prefix = "..\\..\\..\\..\\AirSim\\";
-            _car = new AirSimAutoCar(prefix + "sim.map", prefix + "sim.pln");
+            _car = new();
             //_car.InfoUpdated.Subscribe(x => _logger.ZLogInformation($"log :: Speed: {x.Vehicle.VehicleSpeed:f1}km/h, E: {x.Geo?.LateralError:f3}m, {x.Geo?.HeadingError.Degree:f0}deg"));
         }
 

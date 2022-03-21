@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Reactive.Linq;
-using Microsoft.WindowsAPICodePack.Dialogs;
 using Reactive.Bindings;
 using VePack.Utilities;
 using AirSim;
@@ -31,21 +30,7 @@ namespace WpfApp
 
         public MainWindowViewModel()
         {
-            string? mapFile = null;
-            string? plnFile = null;
-            using var cofd = new CommonOpenFileDialog()
-            {
-                Title = "Select map and pln file.",
-                IsFolderPicker = false,
-                Multiselect = true
-            };
-            cofd.Filters.Add(new("MAP, PLN", "*.map,*.pln"));
-            if (cofd.ShowDialog() is CommonFileDialogResult.Ok)
-            {
-                cofd.FileNames.Where(f => f.Contains(".map")).ToList().ForEach(f => mapFile = f);
-                cofd.FileNames.Where(f => f.Contains(".pln")).ToList().ForEach(f => plnFile = f);
-            }
-            _car = new(mapFile, plnFile);
+            _car = new();
             StartCommand = _car.InfoUpdated.Select(x => x?.IsRunning is false).ToReactiveCommand().WithSubscribe(() => _car.Start());
             StopCommand = _car.InfoUpdated.Select(x => x?.IsRunning is true).ToReactiveCommand().WithSubscribe(() => _car.Stop());
             TargetSpeed.Subscribe(_ => _car?.SetVehicleSpeed(double.Parse(TargetSpeed.Value)));
