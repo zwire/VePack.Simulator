@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using AirSim;
+using VePack.Utilities.Geometry;
 
 namespace ConsoleApp
 {
@@ -44,11 +45,11 @@ namespace ConsoleApp
                             Console.WriteLine($"---> target speed {targetSpeed:f1} km/h");
                             break;
                         case ConsoleKey.LeftArrow:
-                            car.SetSteeringAngle(new(--targetAngle, VePack.Utilities.AngleType.Degree));
+                            car.SetSteeringAngle(new(--targetAngle, AngleType.Degree));
                             Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                         case ConsoleKey.RightArrow:
-                            car.SetSteeringAngle(new(++targetAngle, VePack.Utilities.AngleType.Degree));
+                            car.SetSteeringAngle(new(++targetAngle, AngleType.Degree));
                             Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                     }

@@ -1,6 +1,9 @@
 ﻿using System;
-using VePack.Utilities;
-using VePack.Connectors;
+using VePack.Utilities.IO;
+using VePack.Utilities.Geometry;
+using VePack.Connectors.Gnss;
+using VePack.Connectors.Imu;
+using VePack.Connectors.TextStream;
 
 namespace AirSim
 {
