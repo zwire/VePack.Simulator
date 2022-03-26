@@ -5,7 +5,7 @@
 ### Requirements
 
 * VeBotsメンバーであること
-* .NET5/.NET6 開発環境 (Visual Studio 2019 or 2022)
+* .NET6 (SDK/Runtime)
 
 ### Installation
 
@@ -29,7 +29,7 @@ pip install airsim
 ### Usage
 
 1. まずAirSimのexeを実行。画面が立ち上がり、プログラムからの制御待ち状態になる。
-2. 本プログラムを実行。ConsoleAppはCUI、WpfAppはGUIというだけで、どちらを実行してもよい。
+2. 本プログラムを実行。ConsoleAppはCUI、WpfAppはGUIというだけで、どちらを実行してもよい。GrpcClientはサーバーと通信して遠隔監視される用のモック。
 
 ### About VePack
 * Utilities ... IO とか Geometry とか
