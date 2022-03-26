@@ -89,8 +89,8 @@ namespace AirSim
                         line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
             }
             _stream.WriteString(line);
-            _car.ConnectSendingStream(TimeSpan.FromMilliseconds(10));
-            var observable = _car.ConnectReceivingStream(TimeSpan.FromMilliseconds(100))
+            _car.ConnectSendingStream(new Freq(100));
+            var observable = _car.ConnectReceivingStream(new Freq(10))
                 .Finally(() => Dispose())
                 .Select(x =>
                 {
