@@ -15,6 +15,7 @@ using VePack.Utilities.NeuralNetwork;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
+using System.IO;
 
 namespace AirSim
 {
@@ -33,6 +34,7 @@ namespace AirSim
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
+        private readonly StreamWriter _sw;
         private double _targetSpeed;
         private MapNavigator _navigator;
         private CarOperation _operation;
@@ -53,6 +55,8 @@ namespace AirSim
         public AirSimAutoCar()
         {
             _config = new ConfigurationBuilder().AddJsonFile("rootsettings.json").Build().Get<Rootobject>();
+            _sw = (_config.LogFile is not null && _config.LogFile.Contains(".csv")) ? new(_config.LogFile) : null;
+            _sw?.WriteLine("x__0:lateral,x__1:heading,x__2:steer,x__3:speed,x__4:curvature");
             _cts = new();
             _cts.Cancel();
             _python = new() { StartInfo = new(_config.PythonExe) { Arguments = _config.PyFile} };
@@ -104,6 +108,11 @@ namespace AirSim
                 {
                     if (x?.Geo is not null)
                     {
+                        var lateral = x.Geo.LateralError;
+                        var heading = x.Geo.HeadingError;
+                        var steer = x.Vehicle.SteeringAngle;
+                        var speed = x.Vehicle.VehicleSpeed / 3.6;
+                        _sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed}");
                         return true;
                     }
                     else
@@ -125,6 +134,7 @@ namespace AirSim
         public void Dispose()
         {
             Stop();
+            _sw?.Close();
             _connector?.Dispose();
             _car.Dispose();
             _stream.Dispose();
@@ -272,6 +282,7 @@ namespace AirSim
 
         private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
+            _sw?.WriteLine();
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var pathCurvature = 0.0;
             double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);

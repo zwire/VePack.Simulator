@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using AirSim;
 using VePack.Utilities.Geometry;
 
@@ -12,22 +11,17 @@ namespace ConsoleApp
             
             var car = new AirSimAutoCar();
             car.Start();
-
-            var count = 0;
-            while (File.Exists($"{count}.csv")) count++;
-            StreamWriter sw = null;
-            //sw = new StreamWriter($"{count}.csv");
-            var targetSpeed = 0.0;
-            var targetAngle = 0.0;
             car.InfoUpdated.Subscribe(x =>
             {
                 var lateral = x.Geo.LateralError;
                 var heading = x.Geo.HeadingError;
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed;
-                sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6}");
                 Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f1}deg");
             });
+
+            var targetSpeed = 0.0;
+            var targetAngle = 0.0;
             while (true)
             {
                 if (Console.KeyAvailable)
@@ -56,8 +50,6 @@ namespace ConsoleApp
                 }
             }
         ESC:
-            sw?.Close();
-            sw = null;
             car.Dispose();
         }
     }

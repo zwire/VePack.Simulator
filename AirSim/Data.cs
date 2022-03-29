@@ -24,9 +24,9 @@ namespace AirSim
 
     }
 
-
     public class Rootobject
     {
+        public string LogFile { get; set; }
         public string PythonExe { get; set; }
         public string PyFile { get; set; }
         public string MapFile { get; set; }
