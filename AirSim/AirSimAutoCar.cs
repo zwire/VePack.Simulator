@@ -16,6 +16,7 @@ using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
 using System.IO;
+using VePack.Utilities.Cmac;
 
 namespace AirSim
 {
@@ -68,12 +69,17 @@ namespace AirSim
             _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
             var v = _config.VehicleModelParams;
+            //_steerModel = new KinematicSteeringModel(v.Lf, v.Lr, v.TimeConstant);
             _steerModel = new NNSteeringModel(
-                NetworkGraph.Load(_config.NNSteeringModelFile), 
-                _config.NNTrainBatchSize, 
+                NetworkGraph.Load(_config.SteeringModelFile),
+                _config.TrainModel ? 4 : 0,
                 v.Lf, v.Lr, v.TimeConstant
             );
-            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
+            //_steerModel = new CmacSteeringModel(
+            //    CmacBundler.Load(_config.SteeringModelFile),
+            //    _config.TrainModel,
+            //    v.Lf, v.Lr, v.TimeConstant
+            //);
             var s = _config.SteeringControllerParams;
             _steerController = new(
                 _steerModel,

@@ -17,6 +17,6 @@
     "PfcCoincidenceIndexes": [ 5, 8, 10 ],
     "PfcControlGain": 5.0
   },
-  "NNSteeringModelFile": "..\\..\\..\\..\\AirSim\\latest.ydn",
-  "NNTrainBatchSize": 0
+  "SteeringModelFile": "..\\..\\..\\..\\AirSim\\latest.ydn",
+  "TrainModel": false
 }

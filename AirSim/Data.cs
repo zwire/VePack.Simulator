@@ -24,6 +24,7 @@ namespace AirSim
 
     }
 
+
     public class Rootobject
     {
         public string LogFile { get; set; }
@@ -37,8 +38,8 @@ namespace AirSim
         public float TurnRadius { get; set; }
         public Vehiclemodelparams VehicleModelParams { get; set; }
         public Steeringcontrollerparams SteeringControllerParams { get; set; }
-        public string NNSteeringModelFile { get; set; }
-        public int NNTrainBatchSize { get; set; }
+        public string SteeringModelFile { get; set; }
+        public bool TrainModel { get; set; }
     }
 
     public class Vehiclemodelparams
