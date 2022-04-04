@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
@@ -12,11 +13,10 @@ using VePack.Utilities;
 using VePack.Utilities.Geometry;
 using VePack.Utilities.IO;
 using VePack.Utilities.NeuralNetwork;
+using VePack.Utilities.Cmac;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
-using System.IO;
-using VePack.Utilities.Cmac;
 
 namespace AirSim
 {
@@ -57,7 +57,7 @@ namespace AirSim
         {
             _config = new ConfigurationBuilder().AddJsonFile("rootsettings.json").Build().Get<Rootobject>();
             _sw = (_config.LogFile is not null && _config.LogFile.Contains(".csv")) ? new(_config.LogFile) : null;
-            _sw?.WriteLine("x__0:lateral,x__1:heading,x__2:steer,x__3:speed,x__4:curvature");
+            _sw?.WriteLine("x__0:lateral,x__1:heading,x__2:steer,x__3:speed,x__4:curvature,y__0:lateral,y__1:heading");
             _cts = new();
             _cts.Cancel();
             _python = new() { StartInfo = new(_config.PythonExe) { Arguments = _config.PyFile} };
@@ -68,17 +68,16 @@ namespace AirSim
             _operation = new();
             _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            var v = _config.VehicleModelParams;
-            //_steerModel = new KinematicSteeringModel(v.Lf, v.Lr, v.TimeConstant);
+            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
             _steerModel = new NNSteeringModel(
                 NetworkGraph.Load(_config.SteeringModelFile),
-                _config.TrainModel ? 4 : 0,
-                v.Lf, v.Lr, v.TimeConstant
+                _config.TrainModel ? 4 : 0, 
+                0.1
             );
             //_steerModel = new CmacSteeringModel(
             //    CmacBundler.Load(_config.SteeringModelFile),
             //    _config.TrainModel,
-            //    v.Lf, v.Lr, v.TimeConstant
+            //    1.5, 1.5, 0.1
             //);
             var s = _config.SteeringControllerParams;
             _steerController = new(
@@ -100,6 +99,12 @@ namespace AirSim
             }
             _stream.WriteString(line);
             _car.ConnectSendingStream(new Freq(100));
+
+            double? preLat = null;
+            double? preHead = null;
+            double? preSteer = null;
+            double? preSpeed = null;
+            double? preCurva = null;
             var observable = _car.ConnectReceivingStream(new Freq(10))
                 .Finally(() => Dispose())
                 .Select(x =>
@@ -118,7 +123,23 @@ namespace AirSim
                         var heading = x.Geo.HeadingError;
                         var steer = x.Vehicle.SteeringAngle;
                         var speed = x.Vehicle.VehicleSpeed / 3.6;
-                        _sw?.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed}");
+                        var pathCurvature = 0.0;
+                        double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
+                        if (speed <= 0 || pathCurvature == 0)
+                        {
+                            preLat = null;
+                            preHead = null;
+                            preSpeed = null;
+                            preSteer = null;
+                            preCurva = null;
+                        }
+                        if (preLat is not null && preCurva != 0)
+                            _sw?.WriteLine($"{preLat},{preHead},{preSteer},{preSpeed},{preCurva},{lateral},{heading.Radian}");
+                        preLat = lateral;
+                        preHead = heading.Radian;
+                        preSpeed = speed;
+                        preSteer = steer.Radian;
+                        preCurva = pathCurvature;
                         return true;
                     }
                     else
@@ -288,7 +309,6 @@ namespace AirSim
 
         private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
-            _sw?.WriteLine();
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var pathCurvature = 0.0;
             double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
@@ -304,15 +324,15 @@ namespace AirSim
                     var heading = x.Geo.HeadingError;
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
-                    var curvature = x.Geo.OnThePath ? pathCurvature : 0;
-                    _steerModel.SetParams(speed, curvature);
+                    var curvature = x.Geo.OnThePath ? -pathCurvature : 0;
+                    //_steerModel.SetParams(speed, curvature);
                     _steerModel.PredictDynamics(lateral, heading, steer, speed, curvature);
                     _steerController.CalcParams();
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
-                .Finally(() => _steerModel.SaveModel("latest.ydn"))
+                //.Finally(() => _steerModel.SaveModel("latest.ydn"))
                 .ToTask();
         }
 

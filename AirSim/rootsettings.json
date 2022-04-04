@@ -8,11 +8,6 @@
   "PathEndMargin": 1.5,
   "AutoDirectionModification": true,
   "TurnRadius": 5.8,
-  "VehicleModelParams": {
-    "Lf": 1.5,
-    "Lr": 1.5,
-    "TimeConstant": 0.1
-  },
   "SteeringControllerParams": {
     "PfcCoincidenceIndexes": [ 5, 8, 10 ],
     "PfcControlGain": 5.0

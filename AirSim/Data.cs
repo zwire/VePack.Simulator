@@ -36,17 +36,9 @@ namespace AirSim
         public float PathEndMargin { get; set; }
         public bool AutoDirectionModification { get; set; }
         public float TurnRadius { get; set; }
-        public Vehiclemodelparams VehicleModelParams { get; set; }
         public Steeringcontrollerparams SteeringControllerParams { get; set; }
         public string SteeringModelFile { get; set; }
         public bool TrainModel { get; set; }
-    }
-
-    public class Vehiclemodelparams
-    {
-        public float Lf { get; set; }
-        public float Lr { get; set; }
-        public float TimeConstant { get; set; }
     }
 
     public class Steeringcontrollerparams
