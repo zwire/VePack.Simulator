@@ -31,7 +31,7 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly NNSteeringModel _steerModel;
+        private readonly NnSteeringModel _steerModel;
         private readonly PfcSteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
@@ -69,7 +69,7 @@ namespace AirSim
             _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
             //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
-            _steerModel = new NNSteeringModel(
+            _steerModel = new NnSteeringModel(
                 NetworkGraph.Load(_config.SteeringModelFile),
                 _config.TrainModel ? 4 : 0, 
                 0.1
