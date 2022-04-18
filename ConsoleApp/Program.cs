@@ -39,11 +39,11 @@ namespace ConsoleApp
                             Console.WriteLine($"---> target speed {targetSpeed:f1} km/h");
                             break;
                         case ConsoleKey.LeftArrow:
-                            car.SetSteeringAngle(new(--targetAngle, AngleType.Degree));
+                            car.SetSteeringAngle(Angle.FromDegree(--targetAngle));
                             Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                         case ConsoleKey.RightArrow:
-                            car.SetSteeringAngle(new(++targetAngle, AngleType.Degree));
+                            car.SetSteeringAngle(Angle.FromDegree(++targetAngle));
                             Console.WriteLine($"---> target angle {targetAngle:f1} deg");
                             break;
                     }

@@ -84,8 +84,8 @@ namespace AirSim
                 _steerModel,
                 s.PfcCoincidenceIndexes,
                 s.PfcControlGain,
-                new(35, AngleType.Degree),
-                new(10, AngleType.Degree)
+                Angle.FromDegree(35),
+                Angle.FromDegree(10)
             );
 
             var line = "";
@@ -223,7 +223,7 @@ namespace AirSim
 
         public void SetSteeringAngle(Angle angle)
         {
-            _operation.SteeringAngle = new(angle.Degree.InsideOf(-35, 35), AngleType.Degree);
+            _operation.SteeringAngle = Angle.FromDegree(angle.Degree.InsideOf(-35, 35));
             _car?.Set(_operation);
         }
 
@@ -249,7 +249,7 @@ namespace AirSim
             var end = targetPath[0] - dx * _config.PathEndMargin;
             var edgeVector = new Vector2D(start, end).UnitVector;
             var left = start.IsOnTheLeft(targetPath.GetSegment(0));
-            var dy = dx.Rotate(new(left ? -90 : 90, AngleType.Degree));
+            var dy = dx.Rotate(Angle.FromDegree(left ? -90 : 90));
 
             // パス端のズレ角度
             var slippage = edgeVector.GetClockwiseAngleFrom(dy);
@@ -267,10 +267,10 @@ namespace AirSim
             var o2 = end - r2 * dy;
 
             // このままだと無駄に大きい円ができるので、大きい円を縮める
-            var e1 = new Arc2D(start, o1, new((90 + slippage.Degree) * (left ? 1 : -1), AngleType.Degree)).End;
-            var e2 = new Arc2D(end, o2, new((90 - slippage.Degree) * (left ? -1 : 1), AngleType.Degree)).End;
+            var e1 = new Arc2D(start, o1, Angle.FromDegree((90 + slippage.Degree) * (left ? 1 : -1))).End;
+            var e2 = new Arc2D(end, o2, Angle.FromDegree((90 - slippage.Degree) * (left ? -1 : 1))).End;
             var headlandLine = new Line2D(e1, e2);
-            var hypotenuseLength = _config.TurnRadius / Math.Cos(new Angle((90 - slippage.Degree) / 2, AngleType.Degree).Radian);
+            var hypotenuseLength = _config.TurnRadius / Math.Cos(Angle.FromDegree((90 - slippage.Degree) / 2).Radian);
             if (r1 < r2)
             {
                 var targetLine = targetPath.GetSegment(0);
@@ -291,8 +291,8 @@ namespace AirSim
             }
 
             // 弧を得る
-            var arc1 = new Arc2D(start, o1, new((90 + slippage.Degree) * (left ? 1 : -1), AngleType.Degree)).ApproximateAsPoints(new(5, AngleType.Degree));
-            var arc2 = new Arc2D(end, o2, new((90 - slippage.Degree) * (left ? -1 : 1), AngleType.Degree)).GetReverse().ApproximateAsPoints(new(5, AngleType.Degree));
+            var arc1 = new Arc2D(start, o1, Angle.FromDegree((90 + slippage.Degree) * (left ? 1 : -1))).ApproximateAsPoints(Angle.FromDegree(5));
+            var arc2 = new Arc2D(end, o2, Angle.FromDegree((90 - slippage.Degree) * (left ? -1 : 1))).GetReverse().ApproximateAsPoints(Angle.FromDegree(5));
 
             // 端におめかししてリスト化
             var list1 = new List<UtmPointData>();

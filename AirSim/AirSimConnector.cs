@@ -37,9 +37,9 @@ namespace AirSim
                 return new(
                     t,
                     speed * 3.6,
-                    new(_steerDeg, AngleType.Degree),
+                    Angle.FromDegree(_steerDeg),
                     new GnssData(t, 0, lat, lon, GnssQuality.Simulation),
-                    new ImuData(t, new(yaw, AngleType.Radian), new(pitch, AngleType.Radian), new(roll, AngleType.Radian))
+                    new ImuData(t, Angle.FromRadian(yaw), Angle.FromRadian(pitch), Angle.FromRadian(roll))
                 );
             else
                 return null;
