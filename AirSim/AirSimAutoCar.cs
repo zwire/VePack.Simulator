@@ -20,7 +20,7 @@ using VePack.Plugin.Controllers.ModelBased.Steering;
 
 namespace AirSim
 {
-    public sealed class AirSimAutoCar : IAutoVehicle<CarInformation>
+    public sealed class AirSimAutoCar : IVehicle<CarInformation>
     {
 
         #region fields
@@ -221,9 +221,9 @@ namespace AirSim
             _car.Set(_operation);
         }
 
-        public void SetSteeringAngle(Angle angle)
+        public void SetSteeringAngle(Angle steerAngle)
         {
-            _operation.SteeringAngle = Angle.FromDegree(angle.Degree.InsideOf(-35, 35));
+            _operation.SteeringAngle = Angle.FromDegree(steerAngle.Degree.InsideOf(-35, 35));
             _car?.Set(_operation);
         }
 
@@ -311,7 +311,7 @@ namespace AirSim
         {
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var pathCurvature = 0.0;
-            double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
+            double.TryParse(_navigator.CurrentPath.Id, out pathCurvature);
             if (pathCurvature is 0)
                 _navigator.CurrentPath.ExtendLast(2);
             return await InfoUpdated

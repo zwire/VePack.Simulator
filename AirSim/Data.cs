@@ -11,7 +11,10 @@ namespace AirSim
         Angle SteeringAngle,
         GnssData Gnss,
         ImuData Imu
-    );
+    )
+    {
+        public CarInformation() : this(DateTimeOffset.Now, default, default, default, default) { }
+    }
 
     public class CarOperation
     {
