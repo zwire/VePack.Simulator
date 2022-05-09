@@ -13,7 +13,6 @@ using VePack.Utilities;
 using VePack.Utilities.Geometry;
 using VePack.Utilities.IO;
 using VePack.Utilities.NeuralNetwork;
-using VePack.Utilities.Cmac;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
@@ -124,8 +123,8 @@ namespace AirSim
                         var steer = x.Vehicle.SteeringAngle;
                         var speed = x.Vehicle.VehicleSpeed / 3.6;
                         var pathCurvature = 0.0;
-                        double.TryParse((string)_navigator.CurrentPath.Id, out pathCurvature);
-                        if (speed <= 0 || pathCurvature == 0)
+                        double.TryParse(_navigator.CurrentPath.Id, out pathCurvature);
+                        if (speed <= 0 || pathCurvature is 0)
                         {
                             preLat = null;
                             preHead = null;
@@ -133,7 +132,7 @@ namespace AirSim
                             preSteer = null;
                             preCurva = null;
                         }
-                        if (preLat is not null && preCurva != 0)
+                        if (preLat is not null && preCurva is not 0)
                             _sw?.WriteLine($"{preLat},{preHead},{preSteer},{preSpeed},{preCurva},{lateral},{heading.Radian}");
                         preLat = lateral;
                         preHead = heading.Radian;
@@ -186,7 +185,7 @@ namespace AirSim
 
             InfoUpdated
                .Where(x => x?.Geo is not null && x?.Vehicle is not null)
-               .Where(_ => _operation.FootBrake == 0)
+               .Where(_ => _operation.FootBrake is 0)
                .TakeUntil(x => _cts.IsCancellationRequested)
                .Do(x =>
                {
