@@ -1,6 +1,6 @@
 {
   "LogFile": "log.csv",
-  "PythonExe": "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe",
+  "PythonExe": "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
   "PyFile": "..\\..\\..\\..\\AirSim\\airsim_server.py",
   "MapFile": "..\\..\\..\\..\\AirSim\\sim.map",
   "PlnFile": "..\\..\\..\\..\\AirSim\\sim.pln",
