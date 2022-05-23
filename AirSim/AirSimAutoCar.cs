@@ -311,8 +311,8 @@ namespace AirSim
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
             var pathCurvature = 0.0;
             double.TryParse(_navigator.CurrentPath.Id, out pathCurvature);
-            if (pathCurvature is 0)
-                _navigator.CurrentPath.ExtendLast(2);
+            if (pathCurvature is 0 && _config.PathEndMargin > 0)
+                _navigator.CurrentPath.ExtendLast(_config.PathEndMargin);
             return await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
