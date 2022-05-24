@@ -197,9 +197,9 @@ namespace AirSim
 
             while (_autoSteering && !_cts.IsCancellationRequested)
             {
-                await FollowAsync(_cts.Token);
                 if (await IsToTurnAsync())
-                    await TurnAsync();
+                    await TurnAsync(_cts.Token);
+                await FollowAsync(_cts.Token);
             }
 
         }
@@ -331,7 +331,7 @@ namespace AirSim
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
-                //.Finally(() => _steerModel.SaveModel("latest.ydn"))
+                //.Finally(() => _steerModel.SaveModel("latest.ynn"))
                 .ToTask();
         }
 
@@ -340,13 +340,13 @@ namespace AirSim
             return Math.Abs((await InfoUpdated.FirstOrDefaultAsync()).Geo.HeadingError.Degree) > 90;
         }
 
-        private async Task TurnAsync()
+        private async Task TurnAsync(CancellationToken ct)
         {
             // 先にパスを得る
             var (first, second) = GenerateTurnPath(_navigator.MapData.Paths[_navigator.CurrentPathIndex - 1], _navigator.CurrentPath);
             // 前半パスを追従
             _navigator.InsertPath(_navigator.CurrentPathIndex, first);
-            var ckpt = await FollowAsync(_cts.Token);
+            var ckpt = await FollowAsync(ct);
             var seg = second.GetSegment(0);
             // バックが必要かの判断
             if (ckpt.Geo.VehiclePosition.IsInFrontOf(seg))
@@ -354,17 +354,17 @@ namespace AirSim
                 SetSteeringAngle(Angle.Zero);
                 _steerController.Reset();
                 SetBrake(2);
-                await Task.Delay(200);
+                await Task.Delay(200, ct);
                 SetVehicleSpeed(-_targetSpeed);
                 // secondの始点前までバック
-                await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask();
+                await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask(ct);
                 SetBrake(2);
-                await Task.Delay(200);
+                await Task.Delay(200, ct);
                 SetVehicleSpeed(-_targetSpeed);
             }
             // 後半パスを追従
             _navigator.InsertPath(_navigator.CurrentPathIndex, second);
-            await FollowAsync(_cts.Token);
+            await FollowAsync(ct);
         }
 
         #endregion private methods
