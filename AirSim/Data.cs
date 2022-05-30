@@ -40,6 +40,7 @@ namespace AirSim
         public bool AutoDirectionModification { get; set; }
         public float TurnRadius { get; set; }
         public Steeringcontrollerparams SteeringControllerParams { get; set; }
+        public bool UseNN { get; set; }
         public string SteeringModelFile { get; set; }
         public bool TrainModel { get; set; }
     }

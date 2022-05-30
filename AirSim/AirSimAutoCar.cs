@@ -30,8 +30,8 @@ namespace AirSim
         private readonly TcpSocketClient _client;
         private readonly BidirectionalDataStream _stream;
         private readonly Pid _speedController;
-        private readonly NnSteeringModel _steerModel;
-        private readonly PfcSteeringController _steerController;
+        private readonly GeometricSteeringModel _steerModel;
+        private readonly ISteeringController _steerController;
         private readonly IDisposable _connector;
         private readonly bool _autoSteering;
         private readonly StreamWriter _sw;
@@ -67,24 +67,27 @@ namespace AirSim
             _operation = new();
             _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
-            //_steerModel = new KinematicSteeringModel(1.5, 1.5, 0.1);
-            _steerModel = new NnSteeringModel(
-                NetworkGraph.Load(_config.SteeringModelFile),
-                _config.TrainModel ? 4 : 0, 
-                0.1
-            );
-            //_steerModel = new CmacSteeringModel(
-            //    CmacBundler.Load(_config.SteeringModelFile),
-            //    _config.TrainModel,
-            //    1.5, 1.5, 0.1
-            //);
+            _steerModel = _config.UseNN 
+                ? new NnSteeringModel(
+                    NetworkGraph.Load(_config.SteeringModelFile),
+                    _config.TrainModel ? 4 : 0,
+                    0.1
+                ) 
+                : new GeometricSteeringModel(1.0, 1.0, 0.1);
+
             var s = _config.SteeringControllerParams;
-            _steerController = new(
+            //_steerController = new PfcSteeringController(
+            //    _steerModel,
+            //    s.PfcCoincidenceIndexes,
+            //    s.PfcControlGain,
+            //    Angle.FromDegree(35),
+            //    Angle.FromDegree(10)
+            //);
+            _steerController = new LqrSteeringController(
                 _steerModel,
-                s.PfcCoincidenceIndexes,
-                s.PfcControlGain,
                 Angle.FromDegree(35),
-                Angle.FromDegree(10)
+                Angle.FromDegree(10),
+                10, 10, 1, 1
             );
 
             var line = "";
@@ -323,10 +326,8 @@ namespace AirSim
                     var heading = x.Geo.HeadingError;
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
-                    var curvature = x.Geo.OnThePath ? -pathCurvature : 0;
-                    //_steerModel.SetParams(speed, curvature);
-                    _steerModel.PredictDynamics(lateral, heading, steer, speed, curvature);
-                    _steerController.CalcParams();
+                    var curvature = x.Geo.OnThePath ? pathCurvature : 0;
+                    _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
@@ -352,7 +353,7 @@ namespace AirSim
             if (ckpt.Geo.VehiclePosition.IsInFrontOf(seg))
             {
                 SetSteeringAngle(Angle.Zero);
-                _steerController.Reset();
+                //_steerController.Reset();
                 SetBrake(2);
                 await Task.Delay(200, ct);
                 SetVehicleSpeed(-_targetSpeed);

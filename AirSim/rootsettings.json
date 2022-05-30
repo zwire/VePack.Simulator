@@ -9,9 +9,10 @@
   "AutoDirectionModification": true,
   "TurnRadius": 5.8,
   "SteeringControllerParams": {
-    "PfcCoincidenceIndexes": [ 5, 8, 10 ],
-    "PfcControlGain": 5.0
+    "PfcCoincidenceIndexes": [ 7, 10, 12 ],
+    "PfcControlGain": 3.0
   },
+  "UseNN": true,
   "SteeringModelFile": "..\\..\\..\\..\\AirSim\\latest.ynn",
   "TrainModel": false
 }
