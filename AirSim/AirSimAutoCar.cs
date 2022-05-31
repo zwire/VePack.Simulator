@@ -87,7 +87,7 @@ namespace AirSim
                 _steerModel,
                 Angle.FromDegree(35),
                 Angle.FromDegree(10),
-                10, 10, 1, 1
+                5, 5, 1, 1
             );
 
             var line = "";
