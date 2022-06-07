@@ -1,15 +1,14 @@
 {
   "LogFile": "log.csv",
-  "PythonExe": "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
+  "PythonExe": "..\\..\\..\\..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python37\\python.exe",
   "PyFile": "..\\..\\..\\..\\AirSim\\airsim_server.py",
-  "MapFile": "..\\..\\..\\..\\AirSim\\sim.map",
-  "PlnFile": "..\\..\\..\\..\\AirSim\\sim.pln",
+  "MapFile": "..\\..\\..\\..\\AirSim\\sim.jmap",
   "AutoSteering": true,
-  "PathEndMargin": 1.5,
+  "PathEndMargin": 1.0,
   "AutoDirectionModification": true,
   "TurnRadius": 5.8,
   "SteeringControllerParams": {
-    "PfcCoincidenceIndexes": [ 7, 10, 12 ],
+    "PfcCoincidenceIndexes": [ 5, 7, 10 ],
     "PfcControlGain": 3.0
   },
   "UseNN": true,

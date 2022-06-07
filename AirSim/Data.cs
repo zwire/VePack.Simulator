@@ -34,7 +34,6 @@ namespace AirSim
         public string PythonExe { get; set; }
         public string PyFile { get; set; }
         public string MapFile { get; set; }
-        public string PlnFile { get; set; }
         public bool AutoSteering { get; set; }
         public float PathEndMargin { get; set; }
         public bool AutoDirectionModification { get; set; }
