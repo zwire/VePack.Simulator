@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
@@ -67,11 +66,9 @@ namespace AirSim
                 ) 
                 : new GeometricSteeringModel(1.0, 1.0, 0.1);
 
-            var s = _config.SteeringControllerParams;
             _steerController = new PfcSteeringController(
                 _steerModel,
-                s.PfcCoincidenceIndexes,
-                s.PfcControlGain,
+                new[] { _config.PfcGain * 3, _config.PfcGain * 4, _config.PfcGain * 5 },
                 Angle.FromDegree(35),
                 Angle.FromDegree(10)
             );
