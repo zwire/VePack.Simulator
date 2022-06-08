@@ -68,10 +68,23 @@ namespace AirSim
 
             _steerController = new PfcSteeringController(
                 _steerModel,
-                new[] { _config.PfcGain * 3, _config.PfcGain * 4, _config.PfcGain * 5 },
+                _config.PfcResponseGain,
+                new[]
+                {
+                    _config.PfcFirstCoincidenceIndex * 3,
+                    _config.PfcFirstCoincidenceIndex * 4,
+                    _config.PfcFirstCoincidenceIndex * 5
+                },
                 Angle.FromDegree(35),
                 Angle.FromDegree(10)
             );
+
+            //_steerController = new LqrSteeringController(
+            //    _steerModel,
+            //    0.1, 1, 1, 1,
+            //    Angle.FromDegree(35),
+            //    Angle.FromDegree(10)
+            //);
 
             var line = "";
             if (_config.MapFile is not null && _config.MapFile is not "")

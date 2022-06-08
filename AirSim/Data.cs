@@ -38,7 +38,8 @@ namespace AirSim
         public float PathEndMargin { get; set; }
         public bool AutoDirectionModification { get; set; }
         public float TurnRadius { get; set; }
-        public int PfcGain { get; set; }
+        public double PfcResponseGain { get; set; }
+        public int PfcFirstCoincidenceIndex { get; set; }
         public bool UseNN { get; set; }
         public string SteeringModelFile { get; set; }
         public bool TrainModel { get; set; }
