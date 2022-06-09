@@ -7,8 +7,7 @@
   "PathEndMargin": 1.0,
   "AutoDirectionModification": true,
   "TurnRadius": 6.0,
-  "PfcResponseGain": 5.0,
-  "PfcFirstCoincidenceIndex": 6,
+  "PfcFirstCoincidenceIndex": 5,
   "UseNN": true,
   "SteeringModelFile": "..\\..\\..\\..\\AirSim\\latest.ynn",
   "TrainModel": false

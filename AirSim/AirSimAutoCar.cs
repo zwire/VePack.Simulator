@@ -68,7 +68,6 @@ namespace AirSim
 
             _steerController = new PfcSteeringController(
                 _steerModel,
-                _config.PfcResponseGain,
                 new[]
                 {
                     _config.PfcFirstCoincidenceIndex * 3,
@@ -81,7 +80,7 @@ namespace AirSim
 
             //_steerController = new LqrSteeringController(
             //    _steerModel,
-            //    0.1, 1, 1, 1,
+            //    1, 1, 10,
             //    Angle.FromDegree(35),
             //    Angle.FromDegree(10)
             //);
