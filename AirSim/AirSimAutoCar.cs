@@ -64,7 +64,7 @@ namespace AirSim
                     _config.TrainModel ? 4 : 0,
                     0.1
                 ) 
-                : new GeometricSteeringModel(1.0, 1.0, 0.1);
+                : new GeometricSteeringModel(1.6, 0.4, 0.1);
 
             _steerController = new PfcSteeringController(
                 _steerModel,
@@ -252,12 +252,39 @@ namespace AirSim
                 SetSteeringAngle(Angle.Zero);
                 SetBrake(2);
                 await Task.Delay(200, ct);
+                _navigator.InsertPath(_navigator.CurrentPathIndex, paths.BackPath);
+                var controller = new PfcSteeringController(
+                    _steerModel,
+                    new[]
+                    { 
+                        _config.PfcBackFirstCoincidenceIndex * 3, 
+                        _config.PfcBackFirstCoincidenceIndex * 4, 
+                        _config.PfcBackFirstCoincidenceIndex * 5 
+                    },
+                    Angle.FromDegree(35),
+                    Angle.FromDegree(10)
+                );
                 SetVehicleSpeed(-_targetSpeed);
-                //_navigator.InsertPath(_navigator.CurrentPathIndex, paths.BackPath);
-                //await FollowAsync(ct);
+                await InfoUpdated
+                    .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+                    .TakeWhile(x => !ct.IsCancellationRequested)
+                    .TakeUntil(_navigator.CurrentPathChanged)
+                    .Do(x =>
+                    {
+                        var lateral = x.Geo.LateralError;
+                        var heading = x.Geo.HeadingError - Angle.FromRadian(Math.PI);
+                        var steer = x.Vehicle.SteeringAngle;
+                        var speed = x.Vehicle.VehicleSpeed / 3.6;
+                        double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
+                        _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
+                        var angle = controller.GetSteeringAngle(lateral, heading, steer);
+                        SetSteeringAngle(angle);
+                        Console.Write($"Steer: {angle.Degree:f1} ... ");
+                    })
+                    .ToTask();
                 // secondの始点前までバック
-                var seg = paths.SecondHalf.GetSegment(0);
-                await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask(ct);
+                //var seg = paths.SecondHalf.GetSegment(0);
+                //await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask(ct);
                 SetBrake(2);
                 await Task.Delay(200, ct);
                 SetVehicleSpeed(-_targetSpeed);

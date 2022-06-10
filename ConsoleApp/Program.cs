@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using AirSim;
 using VePack.Utilities.Geometry;
 
@@ -8,6 +9,9 @@ namespace ConsoleApp
     {
         static void Main(string[] args)
         {
+
+            using var sw = new StreamWriter("log_.csv");
+            sw.WriteLine("lateral,heading,steer,speed,curvature");
             
             var car = new AirSimAutoCar();
             car.Start();
@@ -17,6 +21,7 @@ namespace ConsoleApp
                 var heading = x.Geo.HeadingError;
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed;
+                sw.WriteLine($"{lateral},{heading.Radian},{steer.Radian},{speed / 3.6},{0}");
                 Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f1}deg");
             });
 
