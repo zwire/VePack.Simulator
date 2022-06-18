@@ -68,6 +68,7 @@ namespace AirSim
 
             _steerController = new PfcSteeringController(
                 _steerModel,
+                1.0,
                 new[]
                 {
                     _config.PfcFirstCoincidenceIndex * 3,
@@ -255,6 +256,7 @@ namespace AirSim
                 _navigator.InsertPath(_navigator.CurrentPathIndex, paths.BackPath);
                 var controller = new PfcSteeringController(
                     _steerModel,
+                    1.0,
                     new[]
                     { 
                         _config.PfcBackFirstCoincidenceIndex * 3, 
