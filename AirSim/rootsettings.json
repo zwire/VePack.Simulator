@@ -4,12 +4,10 @@
   "PyFile": "..\\..\\..\\..\\AirSim\\airsim_server.py",
   "MapFile": "..\\..\\..\\..\\AirSim\\sim.jmap",
   "AutoSteering": true,
-  "PathEndMargin": 1.0,
-  "AutoDirectionModification": true,
+  "PathEndMargin": 0.0,
+  "AntennaOffset": 1.0,
   "TurnRadius": 6.0,
-  "PfcFirstCoincidenceIndex": 3,
-  "PfcBackFirstCoincidenceIndex": 4,
+  "PfcCoincidenceIndexes": [ 8, 12, 16 ],
   "UseNN": true,
-  "SteeringModelFile": "..\\..\\..\\..\\AirSim\\latest.ynn",
-  "TrainModel": false
+  "SteeringModelFile": "..\\..\\..\\..\\AirSim\\net.cmac"
 }

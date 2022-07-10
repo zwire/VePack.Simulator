@@ -11,6 +11,7 @@ using VePack.Utilities;
 using VePack.Utilities.Geometry;
 using VePack.Utilities.IO;
 using VePack.Utilities.NeuralNetwork;
+using VePack.Utilities.NeuralNetwork.Cmac;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
@@ -31,7 +32,6 @@ namespace AirSim
         private readonly GeometricSteeringModel _steerModel;
         private readonly ISteeringController _steerController;
         private readonly IDisposable _connector;
-        private readonly bool _autoSteering;
         private double _targetSpeed;
         private MapNavigator _navigator;
         private CarOperation _operation;
@@ -56,32 +56,28 @@ namespace AirSim
             _stream = _client.GetStream();
             _car = new(_stream);
             _operation = new();
-            _autoSteering = _config.AutoSteering;
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
             _steerModel = _config.UseNN 
                 ? new NnSteeringModel(
-                    NetworkGraph.Load(_config.SteeringModelFile),
-                    _config.TrainModel ? 4 : 0,
-                    0.1
-                ) 
+                    _config.SteeringModelFile.EndsWith(".ynn")
+                        ? NetworkGraph.Load(_config.SteeringModelFile)
+                        : CmacBundler.Load(_config.SteeringModelFile), 
+                    false, 0.1)
                 : new GeometricSteeringModel(1.6, 0.4, 0.1);
 
+            
             _steerController = new PfcSteeringController(
                 _steerModel,
+                _config.PfcCoincidenceIndexes,
+                (i, v) => CalcCoincidencePoint(i, v), 
                 1.0,
-                new[]
-                {
-                    _config.PfcFirstCoincidenceIndex * 3,
-                    _config.PfcFirstCoincidenceIndex * 4,
-                    _config.PfcFirstCoincidenceIndex * 5
-                },
                 Angle.FromDegree(35),
                 Angle.FromDegree(10)
             );
 
             //_steerController = new LqrSteeringController(
             //    _steerModel,
-            //    1, 1, 10,
+            //    1, 1, 1,
             //    Angle.FromDegree(35),
             //    Angle.FromDegree(10)
             //);
@@ -99,13 +95,15 @@ namespace AirSim
             _car.ConnectSendingStream(new Freq(100));
 
             var observable = _car.ConnectReceivingStream(new Freq(10))
-                .Finally(() => Dispose())
-                .Select(x =>
+                .Finally(Dispose)
+                .Select(d =>
                 {
-                    var wgs = new WgsPointData(x.Gnss.Latitude, x.Gnss.Longitude);
+                    var (x, y, _) = new WgsPointData(d.Gnss.Latitude, d.Gnss.Longitude).ToUtm();
+                    x -= (float)(_config.AntennaOffset * Math.Sin(d.Imu.Yaw.Radian));
+                    y -= (float)(_config.AntennaOffset * Math.Cos(d.Imu.Yaw.Radian));
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        x, x.Gnss, x.Imu, _navigator?.Update(wgs.ToUtm(), x.Imu.Yaw)
+                        d, d.Gnss, d.Imu, _navigator?.Update(new(x, y), d.Imu.Yaw)
                     );
                 })
                 .TakeWhile(x =>
@@ -140,11 +138,24 @@ namespace AirSim
 
         public void SetMap(string mapFile, string plnFile = null)
         {
-            var map = NaviHelper.LoadMapFromFile(mapFile);
-            if (plnFile is not null && plnFile is not "")
-                map = NaviHelper.ModifyMapByPlnFile(plnFile, map);
-            _navigator = new(map);
-            _navigator.CurrentPathChanged.Finally(() => Dispose());
+            if (mapFile is null && mapFile is "")
+                throw new ArgumentNullException(nameof(mapFile));
+            var map = NaviHelper.LoadMapFromFile(mapFile).ModifyMapByPlnFile(plnFile);
+            // 先に旋回パスも作っとく
+            var stride = 1;
+            for (int i = 0; i < map.Paths.Count - 1; i += stride)
+            {
+                if (map.Paths[i].Id is "Work" && _config.PathEndMargin > 0)
+                    map.Paths[i].ExtendLast(_config.PathEndMargin);
+                map.Paths[i + 1] = NaviHelper.ModifyPathDirection(map.Paths[i + 1], map.Paths[i].Points[^1]);
+                var paths = NaviHelper.GenerateTurnPath(map.Paths[i], map.Paths[i + 1], _config.TurnRadius, 1);
+                stride = 1;
+                map.Paths.Insert(i + stride++, paths.FirstHalf);
+                map.Paths.Insert(i + stride++, paths.Bridge);
+                map.Paths.Insert(i + stride++, paths.SecondHalf);
+            }
+            _navigator = new(map) { AutoDirectionModification = false };
+            _navigator.CurrentPathChanged.Finally(Dispose);
         }
 
         public async void Start()
@@ -165,12 +176,8 @@ namespace AirSim
                })
                .Subscribe();
 
-            while (_autoSteering && !_cts.IsCancellationRequested)
-            {
-                if (await IsToTurnAsync())
-                    await TurnAsync(_cts.Token);
+            while (_config.AutoSteering && !_cts.IsCancellationRequested)
                 await FollowAsync(_cts.Token);
-            }
 
         }
 
@@ -208,9 +215,39 @@ namespace AirSim
 
         private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
         {
+
             Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
-            if (_navigator.CurrentPath.Id is "Work" && _config.PathEndMargin > 0)
-                _navigator.CurrentPath.ExtendLast(_config.PathEndMargin);
+            await InfoUpdated.TakeUntil(x => Math.Abs(x.Vehicle.VehicleSpeed) > 0.1).ToTask();
+
+            if (_navigator.CurrentPath.Id is "Back")
+            {
+                SetSteeringAngle(Angle.Zero);
+                SetBrake(2);
+                await Task.Delay(200, ct);
+                SetVehicleSpeed(-_targetSpeed);
+                await InfoUpdated
+                    .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+                    .TakeWhile(x => !ct.IsCancellationRequested)
+                    .TakeUntil(_navigator.CurrentPathChanged)
+                    .Do(x =>
+                    {
+                        var lateral = -x.Geo.LateralError;
+                        var heading = x.Geo.HeadingError - Angle.FromRadian(Math.PI);
+                        var steer = x.Vehicle.SteeringAngle;
+                        var speed = x.Vehicle.VehicleSpeed / 3.6;
+                        double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
+                        _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
+                        var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
+                        SetSteeringAngle(angle);
+                        Console.Write($"Steer: {angle.Degree:f1} ... ");
+                    })
+                    .ToTask();
+                await Task.Delay(200);
+                SetBrake(2);
+                await Task.Delay(200, ct);
+                SetVehicleSpeed(-_targetSpeed);
+            }
+
             return await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
@@ -227,73 +264,66 @@ namespace AirSim
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
                 })
-                //.Finally(() => _steerModel.SaveModel("latest.ynn"))
                 .ToTask();
+
         }
 
-        private async Task<bool> IsToTurnAsync()
+        private double[] CalcCoincidencePoint(int i, double[] v)
         {
-            return Math.Abs((await InfoUpdated.FirstOrDefaultAsync()).Geo.HeadingError.Degree) > 90;
-        }
+            var convergenceTime = 1.5;  // 参照軌道とパスが収束する時間(s)
+            var sharpness = 0.2;        // S字の曲がり具合
+            var speed = _steerModel.VehicleSpeed;
+            var lateralE = speed < 0 ? -v[0] : v[0];
+            var headingE = Angle.FromRadian(v[1]);
+            var convergenceDistance = convergenceTime * Math.Abs(speed);
+            var margin = sharpness * convergenceDistance / 2;
+            var targetPosition = i * _steerModel.Dt / convergenceTime;
+            var lookAheadDistance = convergenceDistance * targetPosition;
+            var curvature = _steerModel.Curvature;
 
-        private async Task TurnAsync(CancellationToken ct)
-        {
-            // 先にパスを得る
-            var paths = NaviHelper.GenerateTurnPath(
-                _navigator.MapData.Paths[_navigator.CurrentPathIndex - 1],
-                _navigator.CurrentPath,
-                _config.TurnRadius
-            );
-            // 前半パスを追従
-            _navigator.InsertPath(_navigator.CurrentPathIndex, paths.FirstHalf);
-            await FollowAsync(ct);
-            // バックが必要なら
-            if (paths.BackPath is not null)
+            // 時刻iの未来がパスの残り距離を超えてるなら境界ベジエ曲線を使う
+            var remaining = _navigator.CurrentPathRemainingDistance;
+            if (
+                remaining < lookAheadDistance && 
+                _navigator.NextPath is not null
+            )
             {
-                SetSteeringAngle(Angle.Zero);
-                SetBrake(2);
-                await Task.Delay(200, ct);
-                _navigator.InsertPath(_navigator.CurrentPathIndex, paths.BackPath);
-                var controller = new PfcSteeringController(
-                    _steerModel,
-                    1.0,
-                    new[]
-                    { 
-                        _config.PfcBackFirstCoincidenceIndex * 3, 
-                        _config.PfcBackFirstCoincidenceIndex * 4, 
-                        _config.PfcBackFirstCoincidenceIndex * 5 
-                    },
-                    Angle.FromDegree(35),
-                    Angle.FromDegree(10)
+                double.TryParse(
+                    NaviHelper.GetLookAheadPoint(
+                        _navigator.NextPath, 
+                        _navigator.NextPath.Points[0], 
+                        lookAheadDistance - remaining,
+                        0
+                    ).Id, 
+                    out var secondCurvature
                 );
-                SetVehicleSpeed(-_targetSpeed);
-                await InfoUpdated
-                    .Where(x => x?.Geo is not null && x?.Vehicle is not null)
-                    .TakeWhile(x => !ct.IsCancellationRequested)
-                    .TakeUntil(_navigator.CurrentPathChanged)
-                    .Do(x =>
-                    {
-                        var lateral = x.Geo.LateralError;
-                        var heading = x.Geo.HeadingError - Angle.FromRadian(Math.PI);
-                        var steer = x.Vehicle.SteeringAngle;
-                        var speed = x.Vehicle.VehicleSpeed / 3.6;
-                        double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
-                        _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
-                        var angle = controller.GetSteeringAngle(lateral, heading, steer);
-                        SetSteeringAngle(angle);
-                        Console.Write($"Steer: {angle.Degree:f1} ... ");
-                    })
-                    .ToTask();
-                // secondの始点前までバック
-                //var seg = paths.SecondHalf.GetSegment(0);
-                //await InfoUpdated.TakeWhile(x => x.Geo.VehiclePosition.IsInFrontOf(seg)).ToTask(ct);
-                SetBrake(2);
-                await Task.Delay(200, ct);
-                SetVehicleSpeed(-_targetSpeed);
+                var (p, h) = Trajectory.GetTargetStateFromBezieCurveAtBorder(
+                    lateralE,
+                    headingE,
+                    targetPosition,
+                    margin,
+                    curvature,
+                    remaining,
+                    secondCurvature,
+                    convergenceDistance - remaining
+                );
+                if (speed < 0) p = new(-p.X, -p.Y);
+                return new double[] { p.X, h.Radian, 0, 0 };
             }
-            // 後半パスを追従
-            _navigator.InsertPath(_navigator.CurrentPathIndex, paths.SecondHalf);
-            await FollowAsync(ct);
+            else
+            {
+                double.TryParse(_navigator.GetLookAheadPoint(lookAheadDistance).Id, out curvature);
+                var (p, h) = Trajectory.GetTargetStateFromBezieCurve(
+                    lateralE,
+                    headingE,
+                    targetPosition,
+                    convergenceDistance,
+                    margin,
+                    curvature
+                );
+                if (speed < 0) p = new(-p.X, -p.Y);
+                return new double[] { p.X, h.Radian, 0, 0 };
+            }
         }
 
     }
