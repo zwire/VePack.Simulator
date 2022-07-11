@@ -69,7 +69,26 @@ namespace AirSim
             _steerController = new PfcSteeringController(
                 _steerModel,
                 _config.PfcCoincidenceIndexes,
-                (i, v) => CalcCoincidencePoint(i, v), 
+                (i, v) =>
+                {
+                    var convergenceTime = 1.5;  // 参照軌道とパスが収束する時間(s)
+                    var sharpness = 0.2;        // S字の曲がり具合
+                    var speed = _steerModel.VehicleSpeed;
+                    var lateralE = speed < 0 ? -v[0] : v[0];
+                    var headingE = Angle.FromRadian(v[1]);
+                    var convergenceDistance = convergenceTime * Math.Abs(speed);
+                    var margin = sharpness * convergenceDistance / 2;
+                    var targetPosition = i * _steerModel.Dt / convergenceTime;
+                    var lookAheadDistance = convergenceDistance * targetPosition;
+                    var switchBack = _navigator.CurrentPath.Id is "Back" || _navigator.NextPath?.Id is "Back";
+                    var startPoint = new TrajectoryPoint(new(lateralE, 0), headingE);
+                    var endPoint = _navigator.GetLookAheadPointFromReferencePoint(lookAheadDistance, !switchBack);
+                    if (targetPosition > 1)
+                        return new double[] { endPoint.Position.X, endPoint.Heading.Radian, 0, 0 };
+                    var (p, h) = NaviHelper.GenerateBezieCurvePoint(startPoint, endPoint, targetPosition, margin);
+                    if (speed < 0) p = new(-p.X, -p.Y);
+                    return new double[] { p.X, h.Radian, 0, 0 };
+                }, 
                 1.0,
                 Angle.FromDegree(35),
                 Angle.FromDegree(10)
@@ -266,64 +285,6 @@ namespace AirSim
                 })
                 .ToTask();
 
-        }
-
-        private double[] CalcCoincidencePoint(int i, double[] v)
-        {
-            var convergenceTime = 1.5;  // 参照軌道とパスが収束する時間(s)
-            var sharpness = 0.2;        // S字の曲がり具合
-            var speed = _steerModel.VehicleSpeed;
-            var lateralE = speed < 0 ? -v[0] : v[0];
-            var headingE = Angle.FromRadian(v[1]);
-            var convergenceDistance = convergenceTime * Math.Abs(speed);
-            var margin = sharpness * convergenceDistance / 2;
-            var targetPosition = i * _steerModel.Dt / convergenceTime;
-            var lookAheadDistance = convergenceDistance * targetPosition;
-            var curvature = _steerModel.Curvature;
-
-            // 時刻iの未来がパスの残り距離を超えてるなら境界ベジエ曲線を使う
-            var remaining = _navigator.CurrentPathRemainingDistance;
-            if (
-                remaining < lookAheadDistance && 
-                _navigator.NextPath is not null
-            )
-            {
-                double.TryParse(
-                    NaviHelper.GetLookAheadPoint(
-                        _navigator.NextPath, 
-                        _navigator.NextPath.Points[0], 
-                        lookAheadDistance - remaining,
-                        0
-                    ).Id, 
-                    out var secondCurvature
-                );
-                var (p, h) = Trajectory.GetTargetStateFromBezieCurveAtBorder(
-                    lateralE,
-                    headingE,
-                    targetPosition,
-                    margin,
-                    curvature,
-                    remaining,
-                    secondCurvature,
-                    convergenceDistance - remaining
-                );
-                if (speed < 0) p = new(-p.X, -p.Y);
-                return new double[] { p.X, h.Radian, 0, 0 };
-            }
-            else
-            {
-                double.TryParse(_navigator.GetLookAheadPoint(lookAheadDistance).Id, out curvature);
-                var (p, h) = Trajectory.GetTargetStateFromBezieCurve(
-                    lateralE,
-                    headingE,
-                    targetPosition,
-                    convergenceDistance,
-                    margin,
-                    curvature
-                );
-                if (speed < 0) p = new(-p.X, -p.Y);
-                return new double[] { p.X, h.Radian, 0, 0 };
-            }
         }
 
     }
