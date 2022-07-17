@@ -15,6 +15,8 @@ using VePack.Utilities.NeuralNetwork.Cmac;
 using VePack.Plugin.Navigation;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
+using VePack.Plugin.Filters.Sensor;
+using VePack.Connectors.Imu;
 
 namespace AirSim
 {
@@ -31,6 +33,7 @@ namespace AirSim
         private readonly Pid _speedController;
         private readonly GeometricSteeringModel _steerModel;
         private readonly ISteeringController _steerController;
+        private readonly LsmHeadingCorrector _imuFilter;
         private readonly IDisposable _connector;
         private double _targetSpeed;
         private MapNavigator _navigator;
@@ -55,6 +58,7 @@ namespace AirSim
             _client = new("127.0.0.1", 3000);
             _stream = _client.GetStream();
             _car = new(_stream);
+            _imuFilter = new();
             _operation = new();
             _speedController = new(PidType.Speed, 0.001, 0, 0.003);
             _steerModel = _config.UseNN 
@@ -62,10 +66,10 @@ namespace AirSim
                     _config.SteeringModelFile.EndsWith(".ynn")
                         ? NetworkGraph.Load(_config.SteeringModelFile)
                         : CmacBundler.Load(_config.SteeringModelFile), 
-                    false, 0.1)
-                : new GeometricSteeringModel(1.6, 0.4, 0.1);
+                    false)
+                : new GeometricSteeringModel(1.6, 0.4);
 
-            
+
             _steerController = new PfcSteeringController(
                 _steerModel,
                 _config.PfcCoincidenceIndexes,
@@ -88,7 +92,7 @@ namespace AirSim
                     var (p, h) = NaviHelper.GenerateBezieCurvePoint(startPoint, endPoint, targetPosition, margin);
                     if (speed < 0) p = new(-p.X, -p.Y);
                     return new double[] { p.X, h.Radian, 0, 0 };
-                }, 
+                },
                 1.0,
                 Angle.FromDegree(35),
                 Angle.FromDegree(10)
@@ -118,11 +122,13 @@ namespace AirSim
                 .Select(d =>
                 {
                     var (x, y, _) = new WgsPointData(d.Gnss.Latitude, d.Gnss.Longitude).ToUtm();
-                    x -= (float)(_config.AntennaOffset * Math.Sin(d.Imu.Yaw.Radian));
-                    y -= (float)(_config.AntennaOffset * Math.Cos(d.Imu.Yaw.Radian));
+                    var heading = _imuFilter.Correct(d.Imu.Yaw, new(x, y), d.SteeringAngle, d.VehicleSpeed / 3.6);
+                    x -= (float)(_config.AntennaOffset * Math.Sin(heading.Radian));
+                    y -= (float)(_config.AntennaOffset * Math.Cos(heading.Radian));
+                    var imuData = new ImuData(DateTimeOffset.Now, heading);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
-                        d, d.Gnss, d.Imu, _navigator?.Update(new(x, y), d.Imu.Yaw)
+                        d, d.Gnss, d.Imu, _navigator?.Update(new(x, y), heading)
                     );
                 })
                 .TakeWhile(x =>
