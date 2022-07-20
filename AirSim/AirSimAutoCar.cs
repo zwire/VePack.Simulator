@@ -89,7 +89,7 @@ namespace AirSim
                     var endPoint = _navigator.GetLookAheadPointFromReferencePoint(lookAheadDistance, !switchBack);
                     if (targetPosition > 1)
                         return new double[] { endPoint.Position.X, endPoint.Heading.Radian, 0, 0 };
-                    var (p, h) = NaviHelper.GenerateBezieCurvePoint(startPoint, endPoint, targetPosition, margin);
+                    var (p, h) = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
                     if (speed < 0) p = new(-p.X, -p.Y);
                     return new double[] { p.X, h.Radian, 0, 0 };
                 },
