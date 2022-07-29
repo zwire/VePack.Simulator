@@ -40,6 +40,8 @@ namespace AirSim
         private CarOperation _operation;
         private CancellationTokenSource _cts;
 
+        private readonly double _actuatorOffsetLength = 0.0;
+
 
         // ------ properties ------ //
 
@@ -68,7 +70,6 @@ namespace AirSim
                         : CmacBundler.Load(_config.SteeringModelFile), 
                     false)
                 : new GeometricSteeringModel(1.6, 0.4);
-
 
             _steerController = new PfcSteeringController(
                 _steerModel,
@@ -125,6 +126,8 @@ namespace AirSim
                     var heading = _imuFilter.Correct(d.Imu.Yaw, new(x, y), d.SteeringAngle, d.VehicleSpeed / 3.6);
                     x -= (float)(_config.AntennaOffset * Math.Sin(heading.Radian));
                     y -= (float)(_config.AntennaOffset * Math.Cos(heading.Radian));
+                    x += (float)(_actuatorOffsetLength * Math.Sin(heading.Radian));
+                    y += (float)(_actuatorOffsetLength * Math.Cos(heading.Radian));
                     var imuData = new ImuData(DateTimeOffset.Now, heading);
                     return new CompositeInfo<CarInformation>(
                         _cts is not null && _cts.IsCancellationRequested is false,
@@ -262,6 +265,7 @@ namespace AirSim
                         var speed = x.Vehicle.VehicleSpeed / 3.6;
                         double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
                         _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
+                        _steerModel.A[0, 2] += _steerModel.A[1, 2] * _actuatorOffsetLength;
                         var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                         SetSteeringAngle(angle);
                         Console.Write($"Steer: {angle.Degree:f1} ... ");
@@ -285,6 +289,7 @@ namespace AirSim
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
                     double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
                     _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
+                    _steerModel.A[0, 2] += _steerModel.A[1, 2] * _actuatorOffsetLength;
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
                     SetSteeringAngle(angle);
                     Console.Write($"Steer: {angle.Degree:f1} ... ");
