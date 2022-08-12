@@ -1,23 +1,21 @@
-﻿using System;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 
-namespace GrpcClient
+namespace GrpcClient;
+
+public record AppOptions(string Address, string UserId, string Password)
 {
-    public record AppOptions(string Address, string UserId, string Password)
+
+    public static AppOptions FromConfiguration(IConfiguration config)
     {
 
-        public static AppOptions FromConfiguration(IConfiguration config)
-        {
+        var address = config["address"];
+        if (address is null) throw new Exception("Address not specified.");
 
-            var address = config["address"];
-            if (address is null) throw new Exception("Address not specified.");
+        var userId = config["user_id"] is { } uid ? uid : "";
+        var password = config["password"] is { } pass ? pass : "";
 
-            var userId = config["user_id"] is { } uid ? uid : "";
-            var password = config["password"] is { } pass ? pass : "";
-
-            return new AppOptions(address, userId, password);
-
-        }
+        return new AppOptions(address, userId, password);
 
     }
+
 }

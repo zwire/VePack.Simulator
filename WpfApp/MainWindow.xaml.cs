@@ -1,13 +1,12 @@
-﻿namespace WpfApp
+﻿namespace WpfApp;
+
+public partial class MainWindow : MahApps.Metro.Controls.MetroWindow
 {
-    public partial class MainWindow : MahApps.Metro.Controls.MetroWindow
+    public MainWindow()
     {
-        public MainWindow()
-        {
-            InitializeComponent();
-            var vm = new MainWindowViewModel();
-            DataContext = vm;
-            Closed += (s, e) => vm.Dispose();
-        }
+        InitializeComponent();
+        var vm = new MainWindowViewModel();
+        DataContext = vm;
+        Closed += (s, e) => vm.Dispose();
     }
 }
