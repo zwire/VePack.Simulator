@@ -31,6 +31,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly ISteeringController _steerController;
     private readonly LsmHeadingCorrector _imuFilter;
     private readonly IDisposable _connector;
+    private readonly DataLogger<CompositeInfo<CarInformation>> _logger;
     private double _targetSpeed;
     private MapNavigator _navigator;
     private CarOperation _operation;
@@ -49,6 +50,13 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     public AirSimAutoCar()
     {
         _config = new ConfigurationBuilder().AddJsonFile("rootsettings.json").Build().Get<Rootobject>();
+        _logger = _config.LogFile is "" 
+            ? null 
+            : new(Path.GetExtension(_config.LogFile).Contains("csv") 
+                ? LogFileFormat.Csv 
+                : LogFileFormat.Json, 
+            _config.LogFile
+        );
         _cts = new();
         _cts.Cancel();
         _python = new() { StartInfo = new(_config.PythonExe) { Arguments = _config.PyFile} };
@@ -134,6 +142,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
             {
                 if (x?.Geo is not null)
                 {
+                    _logger?.Write(x);
                     return true;
                 }
                 else
@@ -153,6 +162,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     public void Dispose()
     {
         Stop();
+        _logger?.Dispose();
         _connector?.Dispose();
         _car.Dispose();
         _stream.Dispose();
