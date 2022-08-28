@@ -80,7 +80,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
             _config.PfcCoincidenceIndexes,
             (i, v) =>
             {
-                var convergenceTime = 1.5;  // 参照軌道とパスが収束する時間(s)
+                var convergenceTime = 3.0;  // 参照軌道とパスが収束する時間(s)
                 var sharpness = 0.2;        // S字の曲がり具合
                 var speed = _steerModel.VehicleSpeed;
                 var lateralE = speed < 0 ? -v[0] : v[0];
@@ -88,10 +88,9 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 var convergenceDistance = convergenceTime * Math.Abs(speed);
                 var margin = sharpness * convergenceDistance / 2;
                 var targetPosition = i * _steerModel.Dt / convergenceTime;
-                var lookAheadDistance = convergenceDistance * targetPosition;
                 var switchBack = _navigator.CurrentPath.Id is "Back" || _navigator.NextPath?.Id is "Back";
                 var startPoint = new TrajectoryPoint(new(lateralE, 0), headingE);
-                var endPoint = _navigator.GetLookAheadPointFromReferencePoint(lookAheadDistance, !switchBack);
+                var endPoint = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance, !switchBack);
                 if (targetPosition > 1)
                     return new double[] { endPoint.Position.X, endPoint.Heading.Radian, 0, 0 };
                 var (p, h) = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
