@@ -8,11 +8,12 @@ using VePack.Utilities.Geometry;
 using VePack.Utilities.IO;
 using VePack.Utilities.NeuralNetwork;
 using VePack.Utilities.NeuralNetwork.Cmac;
+using VePack.Connectors.Imu;
 using VePack.Plugin.Navigation;
+using VePack.Plugin.Filters.Sensor;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
-using VePack.Plugin.Filters.Sensor;
-using VePack.Connectors.Imu;
+using System.IO.Compression;
 
 namespace AirSim;
 
@@ -30,7 +31,6 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly GeometricSteeringModel _steerModel;
     private readonly ISteeringController _steerController;
     private readonly LsmHeadingCorrector _imuFilter;
-    private readonly IDisposable _connector;
     private readonly DataLogger<CompositeInfo<CarInformation>> _logger;
     private double _targetSpeed;
     private MapNavigator _navigator;
@@ -65,7 +65,6 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         _stream = _client.GetStream();
         _car = new(_stream);
         _imuFilter = new();
-        _operation = new();
         _speedController = new(PidType.Speed, 0.001, 0, 0.003);
         _steerModel = _config.UseNN 
             ? new NnSteeringModel(
@@ -83,52 +82,58 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 var convergenceTime = 3.0;  // 参照軌道とパスが収束する時間(s)
                 var sharpness = 0.2;        // S字の曲がり具合
                 var speed = _steerModel.VehicleSpeed;
-                var lateralE = speed < 0 ? -v[0] : v[0];
+                var lateralE = v[0];
                 var headingE = Angle.FromRadian(v[1]);
                 var convergenceDistance = convergenceTime * Math.Abs(speed);
                 var margin = sharpness * convergenceDistance / 2;
                 var targetPosition = i * _steerModel.Dt / convergenceTime;
                 var switchBack = _navigator.CurrentPath.Id is "Back" || _navigator.NextPath?.Id is "Back";
+                TrajectoryPoint tp = null;
                 if (targetPosition > 1)
                 {
-                    var (p, h) = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance * targetPosition, !switchBack);
-                    if (speed < 0) p = new(-p.X, -p.Y);
-                    return new double[] { p.X, h.Radian, 0, 0 };
+                    tp = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance * targetPosition, !switchBack);
                 }
                 else
                 {
                     var startPoint = new TrajectoryPoint(new(lateralE, 0), headingE);
                     var endPoint = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance, !switchBack);
-                    var (p, h) = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
-                    if (speed < 0) p = new(-p.X, -p.Y);
-                    return new double[] { p.X, h.Radian, 0, 0 };
+                    tp = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
                 }
+                if (speed < 0) tp = new(new(-tp.Position.X, -tp.Position.Y), tp.Heading);
+                return new double[] { tp.Position.X, tp.Heading.Radian, 0, 0 };
             },
             1.0,
             Angle.FromDegree(35),
             Angle.FromDegree(10)
         );
 
-        //_steerController = new LqrSteeringController(
-        //    _steerModel,
-        //    1, 1, 1,
-        //    Angle.FromDegree(35),
-        //    Angle.FromDegree(10)
-        //);
-
         var line = "";
         if (_config.MapFile is not null && _config.MapFile is not "")
         {
-            SetMap(_config.MapFile);
+            var map = NaviHelper.LoadMapFromFile(_config.MapFile);
+            // 先に旋回パスも作っとく
+            var stride = 1;
+            for (int i = 0; i < map.Paths.Count - 1; i += stride)
+            {
+                if (map.Paths[i].Id is "Work" && _config.PathEndMargin > 0)
+                    map.Paths[i].ExtendLast(_config.PathEndMargin);
+                map.Paths[i + 1] = NaviHelper.ModifyPathDirection(map.Paths[i + 1], map.Paths[i].Points[^1]);
+                var paths = NaviHelper.GenerateTurnPath(map.Paths[i], map.Paths[i + 1], _config.TurnRadius, 1);
+                stride = 1;
+                map.Paths.Insert(i + stride++, paths.FirstHalf);
+                map.Paths.Insert(i + stride++, paths.Bridge);
+                map.Paths.Insert(i + stride++, paths.SecondHalf);
+            }
+            _navigator = new(map) { AutoDirectionModification = false };
+            _navigator.CurrentPathChanged.Finally(Dispose);
             var iniPoint = _navigator.MapData.Paths[0].Points[0];
             foreach (var path in _navigator.MapData.Paths)
                 foreach (var p in path.Points)
                     line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
         }
         _stream.WriteString(line);
-        _car.ConnectSendingStream(new Freq(100));
 
-        var observable = _car.ConnectReceivingStream(new Freq(10))
+        InfoUpdated = _car.ReceivingStream
             .Finally(Dispose)
             .Select(d =>
             {
@@ -157,9 +162,8 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                     return false;
                 }
             })
-            .Publish();
-        _connector = observable.Connect();
-        InfoUpdated = observable;
+            .Publish()
+            .RefCount();
     }
 
 
@@ -169,40 +173,17 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     {
         Stop();
         _logger?.Dispose();
-        _connector?.Dispose();
         _car.Dispose();
         _stream.Dispose();
         _client.Dispose();
         _python.Dispose();
     }
 
-    public void SetMap(string mapFile, string plnFile = null)
-    {
-        if (mapFile is null && mapFile is "")
-            throw new ArgumentNullException(nameof(mapFile));
-        var map = NaviHelper.LoadMapFromFile(mapFile).ModifyMapByPlnFile(plnFile);
-        // 先に旋回パスも作っとく
-        var stride = 1;
-        for (int i = 0; i < map.Paths.Count - 1; i += stride)
-        {
-            if (map.Paths[i].Id is "Work" && _config.PathEndMargin > 0)
-                map.Paths[i].ExtendLast(_config.PathEndMargin);
-            map.Paths[i + 1] = NaviHelper.ModifyPathDirection(map.Paths[i + 1], map.Paths[i].Points[^1]);
-            var paths = NaviHelper.GenerateTurnPath(map.Paths[i], map.Paths[i + 1], _config.TurnRadius, 1);
-            stride = 1;
-            map.Paths.Insert(i + stride++, paths.FirstHalf);
-            map.Paths.Insert(i + stride++, paths.Bridge);
-            map.Paths.Insert(i + stride++, paths.SecondHalf);
-        }
-        _navigator = new(map) { AutoDirectionModification = false };
-        _navigator.CurrentPathChanged.Finally(Dispose);
-    }
-
     public async void Start()
     {
-
         _cts = new();
         _operation = new();
+        _car.Set(_operation);
 
         InfoUpdated
            .Where(x => x?.Geo is not null && x?.Vehicle is not null)

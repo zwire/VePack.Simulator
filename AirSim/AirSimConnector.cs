@@ -16,7 +16,7 @@ public class AirSimConnector : TextStreamBase<CarOperation, CarInformation>
 
     // ------ constructors ------ //
 
-    public AirSimConnector(BidirectionalDataStream stream) : base(stream) { }
+    public AirSimConnector(BidirectionalDataStream stream) : base(stream, new(10), new(100)) { }
 
 
     // ------ protected methods ------ //
