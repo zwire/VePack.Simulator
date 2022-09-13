@@ -13,7 +13,6 @@ using VePack.Plugin.Navigation;
 using VePack.Plugin.Filters.Sensor;
 using VePack.Plugin.Controllers.ModelFree;
 using VePack.Plugin.Controllers.ModelBased.Steering;
-using System.IO.Compression;
 
 namespace AirSim;
 
