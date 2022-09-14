@@ -26,6 +26,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly Process _python;
     private readonly TcpSocketClient _client;
     private readonly BidirectionalDataStream _stream;
+    private readonly IDisposable _connector;
     private readonly Pid _speedController;
     private readonly GeometricSteeringModel _steerModel;
     private readonly ISteeringController _steerController;
@@ -133,7 +134,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         }
         _stream.WriteString(line);
 
-        InfoUpdated = _car.ReceivingStream
+        var observable = _car.ReceivingStream
             .Finally(Dispose)
             .Select(d =>
             {
@@ -162,8 +163,10 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                     return false;
                 }
             })
-            .Publish()
-            .RefCount();
+            .Publish();
+
+        _connector = observable.Connect();
+        InfoUpdated = observable;
     }
 
 
@@ -173,6 +176,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     {
         Stop();
         _logger?.Dispose();
+        _connector.Dispose();
         _car.Dispose();
         _stream.Dispose();
         _client.Dispose();
