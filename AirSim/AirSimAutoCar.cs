@@ -63,6 +63,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         _client = new("127.0.0.1", 3000);
         _stream = _client.GetStream();
         _car = new(_stream);
+        _operation = new();
         _imuFilter = new();
         _speedController = new(PidType.Speed, 0.001, 0, 0.003);
         _steerModel = _config.UseNN 
