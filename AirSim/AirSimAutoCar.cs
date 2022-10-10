@@ -2,17 +2,17 @@
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Husty.Geometry;
+using Husty.IO;
+using Husty.NeuralNetwork;
+using Husty.NeuralNetwork.Cmac;
 using VePack;
-using VePack.Utilities;
-using VePack.Utilities.Geometry;
-using VePack.Utilities.IO;
-using VePack.Utilities.NeuralNetwork;
-using VePack.Utilities.NeuralNetwork.Cmac;
 using VePack.Connectors.Imu;
-using VePack.Plugin.Navigation;
-using VePack.Plugin.Filters.Sensor;
-using VePack.Plugin.Controllers.ModelFree;
-using VePack.Plugin.Controllers.ModelBased.Steering;
+using VePack.Controllers.ModelFree;
+using VePack.Controllers.ModelBased.Steering;
+using VePack.Navigation;
+using Husty;
+using Husty.Extensions;
 
 namespace AirSim;
 

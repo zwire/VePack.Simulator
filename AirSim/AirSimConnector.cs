@@ -1,5 +1,5 @@
-﻿using VePack.Utilities.IO;
-using VePack.Utilities.Geometry;
+﻿using Husty.IO;
+using Husty.Geometry;
 using VePack.Connectors.Gnss;
 using VePack.Connectors.Imu;
 using VePack.Connectors.TextStream;

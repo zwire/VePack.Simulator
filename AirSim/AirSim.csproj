@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\VePack\VePack\VePack.csproj" />
+    <ProjectReference Include="..\..\VePack\Lib\VePack\VePack.csproj" />
   </ItemGroup>
 
   <ItemGroup>
