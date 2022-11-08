@@ -28,7 +28,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly BidirectionalDataStream _stream;
     private readonly IDisposable _connector;
     private readonly Pid _speedController;
-    private readonly GeometricSteeringModel _steerModel;
+    private readonly KinematicSteeringModel _steerModel;
     private readonly ISteeringController _steerController;
     private readonly LsmHeadingCorrector _imuFilter;
     private readonly DataLogger<CompositeInfo<CarInformation>> _logger;
@@ -73,7 +73,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                     ? NetworkGraph.Load(_config.SteeringModelFile)
                     : CmacBundler.Load(_config.SteeringModelFile), 
                 false)
-            : new GeometricSteeringModel(1.6, 0.4);
+            : new KinematicSteeringModel(1.6, 0.4);
 
         _steerController = new PfcSteeringController(
             _steerModel,
