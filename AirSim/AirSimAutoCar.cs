@@ -2,6 +2,8 @@
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Husty;
+using Husty.Extensions;
 using Husty.Geometry;
 using Husty.IO;
 using Husty.NeuralNetwork;
@@ -11,8 +13,6 @@ using VePack.Connectors.Imu;
 using VePack.Controllers.ModelFree;
 using VePack.Controllers.ModelBased.Steering;
 using VePack.Navigation;
-using Husty;
-using Husty.Extensions;
 
 namespace AirSim;
 
