@@ -89,14 +89,14 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 var margin = sharpness * convergenceDistance / 2;
                 var targetPosition = i * _steerModel.Dt / convergenceTime;
                 var switchBack = _navigator.CurrentPath.Id is "Back" || _navigator.NextPath?.Id is "Back";
-                TrajectoryPoint tp = null;
+                Pose2D tp = null;
                 if (targetPosition > 1)
                 {
                     tp = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance * targetPosition, !switchBack);
                 }
                 else
                 {
-                    var startPoint = new TrajectoryPoint(new(lateralE, 0), headingE);
+                    var startPoint = new Pose2D(new(lateralE, 0), headingE);
                     var endPoint = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance, !switchBack);
                     tp = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
                 }
