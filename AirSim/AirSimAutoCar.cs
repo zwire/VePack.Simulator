@@ -25,7 +25,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly AirSimConnector _car;
     private readonly Process _python;
     private readonly TcpSocketClient _client;
-    private readonly BidirectionalDataStream _stream;
+    private readonly IDataTransporter _stream;
     private readonly IDisposable _connector;
     private readonly Pid _speedController;
     private readonly KinematicSteeringModel _steerModel;
@@ -62,7 +62,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         _python = new() { StartInfo = new(_config.PythonExe) { Arguments = _config.PyFile} };
         _python.Start();
         _client = new("127.0.0.1", 3000);
-        _stream = _client.GetStream();
+        _stream = _client.GetStream().Value;
         _car = new(_stream);
         _operation = new();
         _imuFilter = new();
@@ -132,7 +132,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 foreach (var p in path.Points)
                     line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
         }
-        _stream.WriteString(line);
+        _stream.TryWriteLineAsync(line).Wait();
 
         var observable = _car.ReceivingStream
             .Finally(Dispose)

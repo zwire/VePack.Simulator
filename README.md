@@ -5,7 +5,7 @@
 ### Requirements
 
 * VeBotsメンバーであること
-* .NET6 (SDK/Runtime)
+* .NET7 (SDK/Runtime)
 
 ### Installation
 
