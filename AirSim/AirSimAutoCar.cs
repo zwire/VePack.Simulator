@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Husty;
 using Husty.Extensions;
 using Husty.Geometry;
-using Husty.IO;
+using Husty.Communication;
 using Husty.NeuralNetwork;
 using Husty.NeuralNetwork.Cmac;
 using VePack;

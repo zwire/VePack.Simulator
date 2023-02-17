@@ -1,4 +1,4 @@
-﻿using Husty.IO;
+﻿using Husty.Communication;
 using Husty.Geometry;
 using VePack.Connectors.Gnss;
 using VePack.Connectors.Imu;
