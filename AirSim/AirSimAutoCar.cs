@@ -152,7 +152,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
             })
             .TakeWhile(x =>
             {
-                if (x?.Geo is not null)
+                if (x?.Guidance is not null)
                 {
                     _logger?.Write(x);
                     return true;
@@ -190,7 +190,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         _car.Set(_operation);
 
         InfoUpdated
-           .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+           .Where(x => x?.Guidance is not null && x?.Vehicle is not null)
            .Where(_ => _operation.FootBrake is 0)
            .TakeUntil(x => _cts.IsCancellationRequested)
            .Do(x =>
@@ -251,13 +251,13 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
             await Task.Delay(200, ct);
             SetVehicleSpeed(-_targetSpeed);
             await InfoUpdated
-                .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+                .Where(x => x?.Guidance is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
                 .TakeUntil(_guide.CurrentPathChanged)
                 .Do(x =>
                 {
-                    var lateral = -x.Geo.LateralError;
-                    var heading = x.Geo.HeadingError - Angle.FromRadian(Math.PI);
+                    var lateral = -x.Guidance.LateralError;
+                    var heading = x.Guidance.HeadingError - Angle.FromRadian(Math.PI);
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
                     double.TryParse(_guide.CurrentPoint.Id, out var curvature);
@@ -275,13 +275,13 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         }
 
         return await InfoUpdated
-            .Where(x => x?.Geo is not null && x?.Vehicle is not null)
+            .Where(x => x?.Guidance is not null && x?.Vehicle is not null)
             .TakeWhile(x => !ct.IsCancellationRequested)
             .TakeUntil(_guide.CurrentPathChanged)
             .Do(x =>
             {
-                var lateral = x.Geo.LateralError;
-                var heading = x.Geo.HeadingError;
+                var lateral = x.Guidance.LateralError;
+                var heading = x.Guidance.HeadingError;
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed / 3.6;
                 double.TryParse(_guide.CurrentPoint.Id, out var curvature);

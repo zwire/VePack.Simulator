@@ -11,8 +11,8 @@ internal class Program
         car.Start();
         car.InfoUpdated.Subscribe(x =>
         {
-            var lateral = x.Geo.LateralError;
-            var heading = x.Geo.HeadingError;
+            var lateral = x.Guidance.LateralError;
+            var heading = x.Guidance.HeadingError;
             var steer = x.Vehicle.SteeringAngle;
             var speed = x.Vehicle.VehicleSpeed;
             Console.WriteLine($"Speed: {speed:f1}km/h, E: {lateral:f3}m, {heading.Degree:f1}deg");

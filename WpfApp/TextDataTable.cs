@@ -22,8 +22,8 @@ public class TextDataTable
         {
             VehicleSpeedValue = $"{info.Vehicle.VehicleSpeed:f1} km/h",
             SteeringAngleValue = $"{info.Vehicle.SteeringAngle.Degree:f1} deg",
-            LateralErrorValue = $"{info.Geo.LateralError:f3} m",
-            HeadingErrorValue = $"{info.Geo.HeadingError.Degree:f1} deg",
+            LateralErrorValue = $"{info.Guidance.LateralError:f3} m",
+            HeadingErrorValue = $"{info.Guidance.HeadingError.Degree:f1} deg",
             GnssQualityValue = $"{info.Gnss.GnssQuality}",
             LatitudeValue = $"{info.Gnss.Latitude:f10}",
             LongitudeValue = $"{info.Gnss.Longitude:f10}",
