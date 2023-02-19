@@ -12,7 +12,7 @@ using VePack;
 using VePack.Connectors.Imu;
 using VePack.Controllers.ModelFree;
 using VePack.Controllers.ModelBased.Steering;
-using VePack.Navigation;
+using VePack.Guidance;
 
 namespace AirSim;
 
@@ -33,7 +33,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private readonly LsmHeadingCorrector _imuFilter;
     private readonly DataLogger<CompositeInfo<CarInformation>> _logger;
     private double _targetSpeed;
-    private MapNavigator _navigator;
+    private MapGuide _guide;
     private CarOperation _operation;
     private CancellationTokenSource _cts;
 
@@ -88,17 +88,17 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 var convergenceDistance = convergenceTime * Math.Abs(speed);
                 var margin = sharpness * convergenceDistance / 2;
                 var targetPosition = i * _steerModel.Dt / convergenceTime;
-                var switchBack = _navigator.CurrentPath.Id is "Back" || _navigator.NextPath?.Id is "Back";
+                var switchBack = _guide.CurrentPath.Id is "Back" || _guide.NextPath?.Id is "Back";
                 Pose2D tp = null;
                 if (targetPosition > 1)
                 {
-                    tp = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance * targetPosition, !switchBack);
+                    tp = _guide.GetLookAheadPointFromReferencePoint(convergenceDistance * targetPosition, !switchBack);
                 }
                 else
                 {
                     var startPoint = new Pose2D(new(lateralE, 0), headingE);
-                    var endPoint = _navigator.GetLookAheadPointFromReferencePoint(convergenceDistance, !switchBack);
-                    tp = NaviHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
+                    var endPoint = _guide.GetLookAheadPointFromReferencePoint(convergenceDistance, !switchBack);
+                    tp = GuidanceHelper.GetTrajectoryPointFromBezierCurve(startPoint, endPoint, targetPosition, margin);
                 }
                 if (speed < 0) tp = new(new(-tp.Position.X, -tp.Position.Y), tp.Heading);
                 return new double[] { tp.Position.X, tp.Heading.Radian, 0, 0 };
@@ -111,24 +111,24 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         var line = "";
         if (_config.MapFile is not null && _config.MapFile is not "")
         {
-            var map = NaviHelper.LoadMapFromFile(_config.MapFile);
+            var map = GuidanceHelper.LoadMapFromFile(_config.MapFile);
             // 先に旋回パスも作っとく
             var stride = 1;
             for (int i = 0; i < map.Paths.Count - 1; i += stride)
             {
                 if (map.Paths[i].Id is "Work" && _config.PathEndMargin > 0)
                     map.Paths[i].ExtendLast(_config.PathEndMargin);
-                map.Paths[i + 1] = NaviHelper.ModifyPathDirection(map.Paths[i + 1], map.Paths[i].Points[^1]);
-                var paths = NaviHelper.GenerateTurnPath(map.Paths[i], map.Paths[i + 1], _config.TurnRadius, 1);
+                map.Paths[i + 1] = GuidanceHelper.ModifyPathDirection(map.Paths[i + 1], map.Paths[i].Points[^1]);
+                var paths = GuidanceHelper.GenerateTurnPath(map.Paths[i], map.Paths[i + 1], _config.TurnRadius, 1);
                 stride = 1;
                 map.Paths.Insert(i + stride++, paths.FirstHalf);
                 map.Paths.Insert(i + stride++, paths.Bridge);
                 map.Paths.Insert(i + stride++, paths.SecondHalf);
             }
-            _navigator = new(map) { AutoDirectionModification = false };
-            _navigator.CurrentPathChanged.Finally(Dispose);
-            var iniPoint = _navigator.MapData.Paths[0].Points[0];
-            foreach (var path in _navigator.MapData.Paths)
+            _guide = new(map) { AutoDirectionModification = false };
+            _guide.CurrentPathChanged.Finally(Dispose);
+            var iniPoint = _guide.MapData.Paths[0].Points[0];
+            foreach (var path in _guide.MapData.Paths)
                 foreach (var p in path.Points)
                     line += $"{p.Y - iniPoint.Y},{p.X - iniPoint.X},";
         }
@@ -147,7 +147,7 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
                 var imuData = new ImuData(DateTimeOffset.Now, heading);
                 return new CompositeInfo<CarInformation>(
                     _cts is not null && _cts.IsCancellationRequested is false,
-                    d, d.Gnss, d.Imu, _navigator?.Update(new(x, y), heading)
+                    d, d.Gnss, d.Imu, _guide?.Update(new(x, y), heading)
                 );
             })
             .TakeWhile(x =>
@@ -241,10 +241,10 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
     private async Task<CompositeInfo<CarInformation>> FollowAsync(CancellationToken ct)
     {
 
-        Console.WriteLine($"\nstart to follow path {_navigator.CurrentPathIndex}.\n");
+        Console.WriteLine($"\nstart to follow path {_guide.CurrentPathIndex}.\n");
         await InfoUpdated.TakeUntil(x => Math.Abs(x.Vehicle.VehicleSpeed) > 0.1).ToTask();
 
-        if (_navigator.CurrentPath.Id is "Back")
+        if (_guide.CurrentPath.Id is "Back")
         {
             SetSteeringAngle(Angle.Zero);
             SetBrake(2);
@@ -253,14 +253,14 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
             await InfoUpdated
                 .Where(x => x?.Geo is not null && x?.Vehicle is not null)
                 .TakeWhile(x => !ct.IsCancellationRequested)
-                .TakeUntil(_navigator.CurrentPathChanged)
+                .TakeUntil(_guide.CurrentPathChanged)
                 .Do(x =>
                 {
                     var lateral = -x.Geo.LateralError;
                     var heading = x.Geo.HeadingError - Angle.FromRadian(Math.PI);
                     var steer = x.Vehicle.SteeringAngle;
                     var speed = x.Vehicle.VehicleSpeed / 3.6;
-                    double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
+                    double.TryParse(_guide.CurrentPoint.Id, out var curvature);
                     _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
                     _steerModel.A[0, 2] += _steerModel.A[1, 2] * _actuatorOffsetLength;
                     var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
@@ -277,14 +277,14 @@ public sealed class AirSimAutoCar : IVehicle<CarInformation>
         return await InfoUpdated
             .Where(x => x?.Geo is not null && x?.Vehicle is not null)
             .TakeWhile(x => !ct.IsCancellationRequested)
-            .TakeUntil(_navigator.CurrentPathChanged)
+            .TakeUntil(_guide.CurrentPathChanged)
             .Do(x =>
             {
                 var lateral = x.Geo.LateralError;
                 var heading = x.Geo.HeadingError;
                 var steer = x.Vehicle.SteeringAngle;
                 var speed = x.Vehicle.VehicleSpeed / 3.6;
-                double.TryParse(_navigator.CurrentPoint.Id, out var curvature);
+                double.TryParse(_guide.CurrentPoint.Id, out var curvature);
                 _steerModel.UpdateA(lateral, heading, steer, speed, curvature);
                 _steerModel.A[0, 2] += _steerModel.A[1, 2] * _actuatorOffsetLength;
                 var angle = _steerController.GetSteeringAngle(lateral, heading, steer);
