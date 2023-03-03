@@ -32,8 +32,6 @@ pip install airsim
 2. 本プログラムを実行。ConsoleAppはCUI、WpfAppはGUIというだけで、どちらを実行してもよい。GrpcClientはサーバーと通信して遠隔監視される用のモック。
 
 ### About VePack
-* Utilities ... IO とか Geometry とか
 * Connectors ... sender / receiver のベースクラスとセンサ系
-* Plugin/Navigation ... 位置方位をもとにマップ系の情報を返してくれる
-* Plugin/Controllers ... 制御アルゴリズムの実装
-* Plugin/Filters ... センサの後処理向けのフィルタ類
+* Guidance ... 位置方位をもとにマップ系の情報を返してくれる
+* Controllers ... 制御アルゴリズムの実装
